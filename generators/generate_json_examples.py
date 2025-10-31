@@ -485,7 +485,7 @@ def extract_and_save_schema_examples(openapi_file, output_dir):
 
 
 if __name__ == '__main__':
-    openapi_file_path = 'openapi.yaml'  # Your OpenAPI definition file
+    openapi_file_path = '../openapi.yaml'  # Your OpenAPI definition file
     output_directory = 'examples'       # Folder for generated examples
     extract_and_save_schema_examples(openapi_file_path, output_directory)
 

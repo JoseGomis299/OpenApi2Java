@@ -785,10 +785,10 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
     print("Pass 1: Analyzing class structures for inheritance...\n")
 
     # Load inheritance relationships from OpenAPI schema
-    load_openapi_inheritance('openapi.yaml')
+    load_openapi_inheritance('../openapi.yaml')
 
     # Load oneOf fields from OpenAPI schema
-    load_openapi_oneof_fields('openapi.yaml')
+    load_openapi_oneof_fields('../openapi.yaml')
 
     # First pass: collect all class structures
     class_data = {}
@@ -909,7 +909,7 @@ def organize_classes_by_domain(output_dir, base_package):
 
     # Load OpenAPI to get endpoints
     try:
-        with open('openapi.yaml', 'r') as f:
+        with open('../openapi.yaml', 'r') as f:
             openapi_spec = yaml.safe_load(f)
     except:
         print("  ⚠️  Could not load openapi.yaml")

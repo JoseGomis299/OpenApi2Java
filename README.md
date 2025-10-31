@@ -396,3 +396,23 @@ examples_directory = 'examples'                              # Input: JSON examp
 output_directory = 'java' # Output: Java files
 package_name = 'com.java' # Java package name
 ```
+
+## How to Use
+
+### Running the Main Script
+
+The `main.py` script automates the entire process of generating examples and Java classes. It ensures that the `openapi.yaml` file exists, deletes old `java` and `examples` folders, and regenerates them.
+
+```bash
+python3 main.py
+```
+
+### What the Script Does
+1. Checks if `openapi.yaml` exists in the root directory.
+2. Deletes the `java` and `examples` folders if they exist.
+3. Runs `generate_json_examples.py` to create JSON examples.
+4. Runs `generate_java_classes.py` to generate Java classes from the examples.
+
+### Output Structure
+- `java/` - Contains generated Java classes organized by endpoints.
+- `examples/` - Contains JSON examples organized by endpoints.
