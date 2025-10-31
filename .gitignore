@@ -2,6 +2,10 @@
 examples/
 java/
 
+# Api definition files
+*.yaml
+*.yml
+
 # Python cache
 __pycache__/
 *.pyc
