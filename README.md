@@ -5,18 +5,28 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ## Overview
 
 **Two-step process:**
-1. Extract JSON examples from OpenAPI schema definitions
-2. Generate Java Spring classes from JSON examples
+1. Extract JSON examples from OpenAPI endpoints (organized by METHOD_endpoint/body|response/related)
+2. Generate Java Spring classes from JSON examples (same organization structure)
+
+**Organization Strategy:**
+- Examples and classes are organized by API endpoints
+- Each endpoint folder contains `body/` and/or `response/` subdirectories
+- Main schema is at the top level, all dependencies in `related/` subfolder
+- Classes that appear in multiple endpoints are duplicated (no shared folder)
+- All packages remain as `com.java` (imports not modified)
 
 ## Key Features
 
+✅ **Endpoint-Based Organization** - Files organized by API endpoints (METHOD_endpoint/body|response/related)  
 ✅ **Smart Inheritance Detection** - Automatically detects `allOf` patterns in OpenAPI  
-✅ **OneOf Polymorphism Support** - Generates generic fields with type documentation for `oneOf` schemas  
+✅ **OneOf Polymorphism Support** - Uses class-level generics with bounded type parameters  
+✅ **Complete Dependency Trees** - All related classes (including polymorphic children) in related/ folder  
 ✅ **Separate File Generation** - Each class in its own file (no nested static classes)  
 ✅ **CamelCase Preservation** - Maintains proper Java naming conventions  
 ✅ **Clean Code** - No JSON annotations, pure Lombok POJOs  
 ✅ **Full Reference Resolution** - Handles `$ref`, `allOf`, `oneOf`, `anyOf`  
 ✅ **Type Safety** - Proper generic types for Lists and nested objects  
+✅ **No Import Changes** - All packages remain as `com.java`  
 
 ## Prerequisites
 
@@ -74,15 +84,31 @@ openapi: 3.0.1
 info:
   title: Your API
   version: "1.0"
+paths:
+  /claim:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimDetail'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimCreate'
 components:
   schemas:
-    YourModel:
+    ClaimDetail:
       type: object
       properties:
-        id:
+        policyId:
           type: string
-        name:
-          type: string
+        claimDamagesSpecific:
+          oneOf:
+            - $ref: '#/components/schemas/ApplianceDamagesInfo'
+            - $ref: '#/components/schemas/WaterDamagesInfo'
 ```
 
 ### Step 1: Generate JSON Examples
@@ -91,7 +117,29 @@ components:
 python generate_json_examples.py
 ```
 
-**Output:** JSON examples in `examples/` directory
+**Output:** JSON examples organized by endpoint in `examples/`:
+
+```
+examples/
+  POST_claim/
+    body/
+      ClaimDetail.json                    ← Main request body
+      related/
+        ClaimDamagesSpecific.json
+        ApplianceDamagesInfo.json
+        WaterDamagesInfo.json
+        ClaimCaller.json
+        ...
+    response/
+      ClaimCreate.json                    ← Main response
+      related/
+        ...
+  GET_claim/
+    response/
+      Claim.json
+      related/
+        ...
+```
 
 ### Step 2: Generate Java Classes
 
@@ -100,7 +148,33 @@ python generate_java_classes.py
 # Select option 3 for manual generation
 ```
 
-**Output:** Java files in `java/`
+**Output:** Java files in `java/` with same structure:
+
+```
+java/
+  POST_claim/
+    body/
+      ClaimDetail.java                    ← Main request class
+      related/
+        ClaimDamagesSpecific.java         ← Polymorphic base
+        ApplianceDamagesInfo.java         ← Implementation 1
+        WaterDamagesInfo.java             ← Implementation 2
+        ClaimCaller.java
+        ClaimOcurrenceAddress.java
+        Damage.java
+        AvailabilitiesRecord.java
+        ...                               ← ALL dependencies
+    response/
+      ClaimCreate.java
+  GET_claim/
+    response/
+      Claim.java
+      related/
+        ClaimBase.java
+        ...
+```
+
+**Note:** Classes used in multiple endpoints are duplicated in each endpoint folder.
 
 ## Generated Code Examples
 

@@ -761,19 +761,27 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
     """
     Manually generate Java classes from JSON files without quicktype.
     This is a fallback method with inheritance detection.
+    Reads from organized structure: examples/ENDPOINT/body|response/[related/]*.json
     """
     global all_classes_fields
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    json_files = [f for f in os.listdir(examples_dir) if f.endswith('.json')]
+    # Collect all JSON files recursively from organized structure
+    json_files_data = []
 
-    if not json_files:
+    for root, dirs, files in os.walk(examples_dir):
+        for filename in files:
+            if filename.endswith('.json'):
+                json_path = os.path.join(root, filename)
+                json_files_data.append((filename, json_path))
+
+    if not json_files_data:
         print("No JSON files found.")
         return
 
-    print(f"\n=== Manually generating Java classes from {len(json_files)} JSON files ===\n")
+    print(f"\n=== Manually generating Java classes from {len(json_files_data)} JSON files ===\n")
     print("Pass 1: Analyzing class structures for inheritance...\n")
 
     # Load inheritance relationships from OpenAPI schema
@@ -784,9 +792,16 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
 
     # First pass: collect all class structures
     class_data = {}
-    for json_file in json_files:
-        json_path = os.path.join(examples_dir, json_file)
+    seen_classes = set()  # Track classes we've already processed to avoid duplicates
+
+    for json_file, json_path in json_files_data:
         class_name = to_java_class_name(json_file.replace('.json', ''))
+
+        # Skip if we've already processed this class (from another endpoint)
+        if class_name in seen_classes:
+            continue
+
+        seen_classes.add(class_name)
 
         try:
             with open(json_path, 'r') as f:
@@ -880,6 +895,443 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
 
     print(f"\n✅ Regenerated {regenerated} classes with inheritance")
 
+    # Fourth pass: Organize classes into folders by domain
+    print("\nPass 4: Organizing classes into domain folders...\n")
+    organize_classes_by_domain(output_dir, package)
+
+
+def organize_classes_by_domain(output_dir, base_package):
+    """Organize generated classes by OpenAPI endpoints with body/response/related structure."""
+    import re
+    import yaml
+
+    print("  Analyzing OpenAPI endpoints...")
+
+    # Load OpenAPI to get endpoints
+    try:
+        with open('openapi.yaml', 'r') as f:
+            openapi_spec = yaml.safe_load(f)
+    except:
+        print("  ⚠️  Could not load openapi.yaml")
+        return
+
+    # Analyze all generated Java files first
+    class_info = {}
+
+    for filename in os.listdir(output_dir):
+        if not filename.endswith('.java'):
+            continue
+
+        filepath = os.path.join(output_dir, filename)
+        with open(filepath, 'r') as f:
+            content = f.read()
+
+        # Extract class name
+        class_match = re.search(r'public\s+(?:abstract\s+)?class\s+(\w+)', content)
+        if not class_match:
+            continue
+
+        class_name = class_match.group(1)
+
+        # Extract extends
+        extends_match = re.search(r'extends\s+(\w+)', content)
+        extends = extends_match.group(1) if extends_match else None
+
+        # Extract field types (references)
+        references = set()
+        for match in re.finditer(r'private\s+(?:List<)?(\w+)>?\s+\w+;', content):
+            field_type = match.group(1)
+            if field_type not in ['String', 'Integer', 'Long', 'Double', 'Boolean', 'LocalDate', 'LocalDateTime', 'Object']:
+                references.add(field_type)
+
+        # Extract generic bounds
+        generic_match = re.search(r'class\s+\w+<\w+\s+extends\s+(\w+)>', content)
+        if generic_match:
+            references.add(generic_match.group(1))
+
+        class_info[class_name] = {
+            'file': filename,
+            'extends': extends,
+            'references': list(references),
+            'children': []
+        }
+
+    # Build children relationships
+    for class_name, info in class_info.items():
+        if info['extends'] and info['extends'] in class_info:
+            class_info[info['extends']]['children'].append(class_name)
+
+    def get_all_dependencies(class_name, visited=None):
+        """Recursively get ALL dependencies including polymorphic children."""
+        if visited is None:
+            visited = set()
+
+        if class_name in visited or class_name not in class_info:
+            return visited
+
+        visited.add(class_name)
+        info = class_info[class_name]
+
+        # Include direct base class too (so bases are present for grouping)
+        if info['extends']:
+            get_all_dependencies(info['extends'], visited)
+
+        # Add all field references
+        for ref in info['references']:
+            get_all_dependencies(ref, visited)
+
+        # Add all children (polymorphic implementations)
+        for child in info['children']:
+            get_all_dependencies(child, visited)
+
+        return visited
+
+    def to_camel_case_folder(name: str) -> str:
+        """Convert PascalCase to camelCase for folder names."""
+        if not name:
+            return name
+        return name[0].lower() + name[1:]
+
+    # Extract endpoints from OpenAPI
+    endpoints_data = []
+    paths = openapi_spec.get('paths', {})
+
+    for path, path_item in paths.items():
+        for method, operation in path_item.items():
+            if method not in ['get', 'post', 'put', 'patch', 'delete']:
+                continue
+
+            # Generate endpoint name
+            endpoint_parts = [p for p in path.split('/') if p and not p.startswith('{')]
+            endpoint_name = f"{method.upper()}_{'_'.join(endpoint_parts)}" if endpoint_parts else f"{method.upper()}_root"
+
+            # Extract request body schema
+            request_schema = None
+            request_body = operation.get('requestBody', {})
+            if request_body:
+                content = request_body.get('content', {})
+                json_content = content.get('application/json', {})
+                schema = json_content.get('schema', {})
+                if '$ref' in schema:
+                    request_schema = to_java_class_name(schema['$ref'].split('/')[-1])
+
+            # Extract response schemas
+            response_schemas = []
+            responses = operation.get('responses', {})
+            responses_comp = openapi_spec.get('components', {}).get('responses', {})
+
+            for status_code, response in responses.items():
+                if status_code.startswith('2'):
+                    if '$ref' in response:
+                        ref_name = response['$ref'].split('/')[-1]
+                        if ref_name in responses_comp:
+                            resp_content = responses_comp[ref_name].get('content', {})
+                            json_content = resp_content.get('application/json', {})
+                            schema = json_content.get('schema', {})
+                            if '$ref' in schema:
+                                response_schemas.append(to_java_class_name(schema['$ref'].split('/')[-1]))
+                    else:
+                        resp_content = response.get('content', {})
+                        json_content = resp_content.get('application/json', {})
+                        schema = json_content.get('schema', {})
+                        if '$ref' in schema:
+                            response_schemas.append(to_java_class_name(schema['$ref'].split('/')[-1]))
+
+            endpoints_data.append({
+                'name': endpoint_name,
+                'request': request_schema,
+                'responses': response_schemas
+            })
+
+    print(f"  Found {len(endpoints_data)} endpoints")
+
+    # Collect all files to back up
+    temp_files = {}
+    for filename in os.listdir(output_dir):
+        if filename.endswith('.java'):
+            src = os.path.join(output_dir, filename)
+            with open(src, 'r') as f:
+                temp_files[filename] = f.read()
+
+    # Also check subdirectories
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if filename.endswith('.java'):
+                filepath = os.path.join(root, filename)
+                with open(filepath, 'r') as f:
+                    temp_files[filename] = f.read()
+
+    # Clear output directory
+    import shutil
+    for item in os.listdir(output_dir):
+        item_path = os.path.join(output_dir, item)
+        if os.path.isdir(item_path):
+            shutil.rmtree(item_path)
+        elif item.endswith('.java'):
+            os.remove(item_path)
+
+    # Helper: write dependencies into related grouped by inheritance
+    def write_related_grouped(related_dir: str, dep_classes: set):
+        os.makedirs(related_dir, exist_ok=True)
+        written = set()
+
+        # Build groups: base -> set(children)
+        groups = {}
+        for cls in dep_classes:
+            if cls not in class_info:
+                continue
+            base = class_info[cls]['extends']
+            if base:
+                groups.setdefault(base, set()).add(cls)
+
+        # Create subfolders for bases that have at least one child in deps
+        for base, children in groups.items():
+            subdir = os.path.join(related_dir, to_camel_case_folder(base))
+            os.makedirs(subdir, exist_ok=True)
+            # Write base itself (if available)
+            if base in class_info:
+                base_file = class_info[base]['file']
+                if base_file in temp_files:
+                    with open(os.path.join(subdir, base_file), 'w') as f:
+                        f.write(temp_files[base_file])
+                    written.add(base)
+            # Write children
+            for child in sorted(children):
+                child_file = class_info[child]['file']
+                if child_file in temp_files:
+                    with open(os.path.join(subdir, child_file), 'w') as f:
+                        f.write(temp_files[child_file])
+                    written.add(child)
+
+        # Write remaining classes (no inheritance grouping) into related root
+        for cls in sorted(dep_classes):
+            if cls in written or cls not in class_info:
+                continue
+            file = class_info[cls]['file']
+            if file in temp_files:
+                with open(os.path.join(related_dir, file), 'w') as f:
+                    f.write(temp_files[file])
+                written.add(cls)
+
+        return len(written)
+
+    # Organize files by endpoint
+    total_files = 0
+
+    for endpoint in endpoints_data:
+        endpoint_dir = os.path.join(output_dir, endpoint['name'])
+
+        # Process request body
+        if endpoint['request'] and endpoint['request'] in class_info:
+            body_dir = os.path.join(endpoint_dir, 'body')
+            # Asegurarse de que endpoint_dir sea una cadena antes de usar os.path.join
+            endpoint_dir = str(endpoint_dir)
+            body_dir = os.path.join(endpoint_dir, 'body')
+            os.makedirs(body_dir, exist_ok=True)
+
+            # Save main class
+            main_class = endpoint['request']
+            main_file = class_info[main_class]['file']
+            if main_file in temp_files:
+                dest = os.path.join(body_dir, main_file)
+                with open(dest, 'w') as f:
+                    f.write(temp_files[main_file])
+                total_files += 1
+            else:
+                print(f"⚠️  File '{main_file}' for class '{main_class}' not found.")
+
+            # Get all dependencies including bases and children
+            all_deps = get_all_dependencies(main_class)
+            all_deps.discard(main_class)
+
+            if all_deps:
+                related_dir = os.path.join(body_dir, 'related')
+                total_files += write_related_grouped(related_dir, all_deps)
+
+        # Process responses
+        for response_class in endpoint['responses']:
+            if response_class not in class_info:
+                continue
+
+            response_dir = os.path.join(str(endpoint_dir), 'response')
+            os.makedirs(response_dir, exist_ok=True)
+
+            # Save main response class
+            main_file = class_info[response_class]['file']
+            if main_file in temp_files:
+                dest = os.path.join(str(response_dir), main_file)
+                with open(dest, 'w') as f:
+                    f.write(temp_files[main_file])
+                total_files += 1
+
+            # Get all dependencies including bases and children
+            all_deps = get_all_dependencies(response_class)
+            all_deps.discard(response_class)
+
+            if all_deps:
+                related_dir = os.path.join(str(response_dir), 'related')
+                total_files += write_related_grouped(str(related_dir), all_deps)
+
+    print(f"✅ Organized {total_files} files into {len(endpoints_data)} endpoint folders")
+    print(f"   Structure: endpoint/body|response/related/ (grouped by inheritance)\n")
+
+
+def fix_imports_after_organization(output_dir, base_package, class_info):
+    """Fix imports in all organized Java files."""
+    print("Pass 4.5: Fixing imports in organized classes...\n")
+
+    # Build map of class name -> package
+    class_packages = {}
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if not filename.endswith('.java'):
+                continue
+
+            class_name = filename[:-5]
+            rel_path = os.path.relpath(root, output_dir)
+
+            if rel_path == '.':
+                class_packages[class_name] = base_package
+            else:
+                package_suffix = rel_path.replace(os.sep, '.')
+                class_packages[class_name] = f"{base_package}.{package_suffix}"
+
+    # Fix imports in each file
+    fixed_count = 0
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if not filename.endswith('.java'):
+                continue
+
+            filepath = os.path.join(root, filename)
+
+            with open(filepath, 'r') as f:
+                content = f.read()
+
+            # Get current package
+            package_match = re.search(r'package\s+([\w.]+);', content)
+            if not package_match:
+                continue
+
+            current_package = package_match.group(1)
+
+            # Get referenced classes from class_info if available
+            class_name = filename[:-5]
+            if class_name in class_info:
+                references = set(class_info[class_name]['references'])
+                if class_info[class_name]['extends']:
+                    references.add(class_info[class_name]['extends'])
+            else:
+                continue
+
+            # Build necessary imports
+            necessary_imports = set()
+            for ref_class in references:
+                if ref_class in class_packages:
+                    ref_package = class_packages[ref_class]
+                    # Only import if from different package
+                    if ref_package != current_package:
+                        necessary_imports.add(f'import {ref_package}.{ref_class};')
+
+            if not necessary_imports:
+                continue
+
+            # Remove existing imports and add new ones
+            lines = content.split('\n')
+
+            # Find package line
+            package_line_idx = None
+            for i, line in enumerate(lines):
+                if line.strip().startswith('package '):
+                    package_line_idx = i
+                    break
+
+            if package_line_idx is None:
+                continue
+
+            # Find first annotation or class declaration
+            first_code_idx = None
+            for i in range(package_line_idx + 1, len(lines)):
+                stripped = lines[i].strip()
+                if stripped and not stripped.startswith('import '):
+                    first_code_idx = i
+                    break
+
+            if first_code_idx is None:
+                continue
+
+            # Rebuild file
+            new_lines = []
+            new_lines.extend(lines[:package_line_idx + 1])
+            new_lines.append('')
+
+            # Add necessary imports (sorted)
+            for imp in sorted(necessary_imports):
+                new_lines.append(imp)
+            new_lines.append('')
+
+            # Add rest of the file
+            new_lines.extend(lines[first_code_idx:])
+
+            # Write back
+            with open(filepath, 'w') as f:
+                f.write('\n'.join(new_lines))
+
+            fixed_count += 1
+
+    print(f"✅ Fixed imports in {fixed_count} files\n")
+
+
+def organize_classes_by_endpoint_and_inheritance(output_dir):
+    """
+    Organize generated classes into folders based on endpoints and inheritance.
+    - Create folders for each endpoint (e.g., POST_claims).
+    - Separate into `body` and `response`.
+    - Within `related`, organize by inheritance.
+    """
+    for class_name, fields in all_classes_fields.items():
+        # Determine endpoint and type (body/response) from OpenAPI schema
+        endpoint = detect_endpoint_from_class(class_name)
+        class_type = detect_class_type(class_name)  # 'body' or 'response'
+
+        # Create base folder structure
+        endpoint_folder = os.path.join(output_dir, endpoint)
+        type_folder = os.path.join(endpoint_folder, class_type)
+        related_folder = os.path.join(type_folder, 'related')
+
+        os.makedirs(related_folder, exist_ok=True)
+
+        # Place the class in the appropriate folder
+        class_file = f"{class_name}.java"
+        class_path = os.path.join(output_dir, class_file)
+
+        if class_name in inheritance_map:
+            # Organize by inheritance
+            base_class = inheritance_map[class_name]
+            base_folder = os.path.join(related_folder, base_class)
+            os.makedirs(base_folder, exist_ok=True)
+            new_path = os.path.join(base_folder, class_file)
+        else:
+            # Place directly in `related`
+            new_path = os.path.join(related_folder, class_file)
+
+        if os.path.exists(class_path):
+            os.rename(class_path, new_path)
+
+
+def detect_endpoint_from_class(class_name):
+    """Infer the endpoint name from the class name."""
+    # Example logic: parse class name or use OpenAPI metadata
+    return "POST_claims"  # Placeholder
+
+def detect_class_type(class_name):
+    """Determine if the class is part of the body or response."""
+    # Example logic: check naming conventions or OpenAPI metadata
+    return "body"  # Placeholder
+
+# Call the organization function after generating classes
+output_directory = "java"
+organize_classes_by_endpoint_and_inheritance(output_directory)
 
 if __name__ == '__main__':
     examples_directory = 'examples'
@@ -918,4 +1370,3 @@ if __name__ == '__main__':
     print("\n✅ Java class generation complete!")
     print(f"   Output directory: {output_directory}")
     print(f"   Package: {package_name}")
-

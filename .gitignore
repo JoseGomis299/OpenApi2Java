@@ -1,28 +1,33 @@
-# Generated folders
+# Generated examples and java classes
 examples/
 java/
-
-# Api definition files
-*.yaml
-*.yml
 
 # Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 
 # Virtual environment
+.venv/
 venv/
-env/
 ENV/
 
 # IDE
 .idea/
 *.iml
 .vscode/
+*.swp
+*.swo
+*~
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
