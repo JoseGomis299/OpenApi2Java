@@ -11,6 +11,7 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ## Key Features
 
 ✅ **Smart Inheritance Detection** - Automatically detects `allOf` patterns in OpenAPI  
+✅ **OneOf Polymorphism Support** - Generates generic fields with type documentation for `oneOf` schemas  
 ✅ **Separate File Generation** - Each class in its own file (no nested static classes)  
 ✅ **CamelCase Preservation** - Maintains proper Java naming conventions  
 ✅ **Clean Code** - No JSON annotations, pure Lombok POJOs  
@@ -167,6 +168,105 @@ public class Vehicle {
 }
 ```
 
+### OneOf Support (Polymorphic Fields)
+When your OpenAPI schema uses `oneOf`, the generator creates:
+1. An abstract base class using the field name (e.g., `paymentMethod` → `PaymentMethod`)
+2. Makes all specific types extend from that base class
+3. Uses class-level generics with bounded type parameters
+
+```java
+package com.java;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class Payment<TPaymentMethod extends PaymentMethod> {
+    private String paymentId;
+    private Double amount;
+    // Can be one of: CreditCardInfo, BankAccountInfo, PayPalInfo, CryptoWalletInfo
+    private TPaymentMethod paymentMethod;
+}
+```
+
+**Generated base class:**
+```java
+package com.java;
+
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public abstract class PaymentMethod {
+    // Polymorphic base class for oneOf types
+    // All concrete implementations will extend this class
+}
+```
+
+**Specific implementation example:**
+```java
+package com.java;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+@AllArgsConstructor
+public class CreditCardInfo extends PaymentMethod {
+    private String cardNumber;
+    private String expirationDate;
+    private String cvv;
+}
+```
+
+**OpenAPI schema example:**
+```yaml
+components:
+  schemas:
+    Payment:
+      type: object
+      properties:
+        paymentId:
+          type: string
+        amount:
+          type: number
+        paymentMethod:
+          oneOf:
+            - $ref: '#/components/schemas/CreditCardInfo'
+            - $ref: '#/components/schemas/BankAccountInfo'
+            - $ref: '#/components/schemas/PayPalInfo'
+            - $ref: '#/components/schemas/CryptoWalletInfo'
+```
+
+**Usage example:**
+```java
+// Type-safe usage with specific implementation
+Payment<CreditCardInfo> cardPayment = Payment.<CreditCardInfo>builder()
+    .paymentId("PAY-001")
+    .amount(99.99)
+    .paymentMethod(new CreditCardInfo("1234-5678-9012-3456", "12/25", "123"))
+    .build();
+
+// Or with any other type that extends PaymentMethod
+Payment<BankAccountInfo> bankPayment = Payment.<BankAccountInfo>builder()
+    .paymentId("PAY-002")
+    .amount(150.00)
+    .paymentMethod(new BankAccountInfo("ES1234567890", "John Doe"))
+    .build();
+```
+
 ## How It Works
 
 ### JSON Generation (`generate_json_examples.py`)
@@ -189,12 +289,14 @@ public class Vehicle {
 
 1. **Pass 1: Analyze OpenAPI**
    - Load inheritance from `allOf` patterns
+   - Detect `oneOf` fields for polymorphic type handling
    - Build schema relationship map
    - No naming conventions required
 
 2. **Pass 2: Generate Classes**
    - Create all top-level classes
    - Extract nested objects to separate files
+   - Apply generic `Object` type to `oneOf` fields with type comments
    - Maintain type references
 
 3. **Pass 3: Apply Inheritance**

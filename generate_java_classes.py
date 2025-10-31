@@ -9,6 +9,8 @@ import yaml
 all_classes_fields = {}
 # Global dictionary to track inheritance from OpenAPI allOf patterns
 inheritance_map = {}
+# Global dictionary to track oneOf fields that should use generics: {ClassName: {fieldName: [Type1, Type2, ...]}}
+oneof_fields_map = {}
 
 
 def to_java_class_name(name):
@@ -109,6 +111,96 @@ def load_openapi_inheritance(openapi_file='openapi.yaml'):
         print(f"  ⚠️  Error loading OpenAPI schema: {e}\n")
 
 
+def load_openapi_oneof_fields(openapi_file='openapi.yaml'):
+    """
+    Load OpenAPI schema and extract oneOf field definitions.
+    Populates the oneof_fields_map global dictionary.
+    For fields using oneOf, we'll generate a base class and use generics in Java.
+
+    oneof_fields_map structure:
+    {
+        'ClassName': {
+            'fieldName': {
+                'types': [Type1, Type2, ...],
+                'baseClass': 'BaseClassName'
+            }
+        }
+    }
+    """
+    global oneof_fields_map, inheritance_map
+
+    try:
+        with open(openapi_file, 'r') as f:
+            openapi_spec = yaml.safe_load(f)
+
+        schemas = openapi_spec.get('components', {}).get('schemas', {})
+
+        for schema_name, schema_def in schemas.items():
+            class_name = to_java_class_name(schema_name)
+
+            # Navigate through the schema to find oneOf fields
+            # Collect all properties from different sources
+            all_properties = {}
+
+            # Handle direct properties
+            if isinstance(schema_def, dict) and 'properties' in schema_def:
+                all_properties.update(schema_def['properties'])
+
+            # Handle allOf with properties - merge all properties from all allOf elements
+            if isinstance(schema_def, dict) and 'allOf' in schema_def:
+                for item in schema_def['allOf']:
+                    if isinstance(item, dict) and 'properties' in item:
+                        all_properties.update(item['properties'])
+
+            # Now check all collected properties for oneOf fields
+            if all_properties:
+                for field_name, field_def in all_properties.items():
+                    if isinstance(field_def, dict) and 'oneOf' in field_def:
+                        # Extract the types from oneOf
+                        oneof_types = []
+                        for ref_item in field_def['oneOf']:
+                            if isinstance(ref_item, dict) and '$ref' in ref_item:
+                                ref_path = ref_item['$ref']
+                                if ref_path.startswith('#/components/schemas/'):
+                                    type_name = ref_path.split('/')[-1]
+                                    java_type = to_java_class_name(type_name)
+                                    oneof_types.append(java_type)
+
+                        if oneof_types:
+                            # Use the field name itself as the base class (without "Base" suffix)
+                            # This handles cases where the JSON generator creates a concrete class
+                            # from the first oneOf option using the field name
+                            base_class_name = to_java_class_name(field_name)
+
+                            if class_name not in oneof_fields_map:
+                                oneof_fields_map[class_name] = {}
+
+                            oneof_fields_map[class_name][field_name] = {
+                                'types': oneof_types,
+                                'baseClass': base_class_name
+                            }
+
+                            # Add inheritance relationships for all oneOf types to extend the base class
+                            for java_type in oneof_types:
+                                # Only add if not already inheriting from something else
+                                if java_type not in inheritance_map:
+                                    inheritance_map[java_type] = base_class_name
+
+                            print(f"  🔀 Detected: {class_name}.{field_name} uses oneOf with {len(oneof_types)} types")
+                            print(f"     → Using {base_class_name} as base class (will be generated as abstract)")
+
+        if oneof_fields_map:
+            total_fields = sum(len(fields) for fields in oneof_fields_map.values())
+            print(f"\n  Found {total_fields} oneOf fields across {len(oneof_fields_map)} classes\n")
+        else:
+            print("  No oneOf fields found\n")
+
+    except FileNotFoundError:
+        print(f"  ⚠️  OpenAPI file '{openapi_file}' not found, skipping oneOf detection\n")
+    except Exception as e:
+        print(f"  ⚠️  Error loading OpenAPI schema for oneOf: {e}\n")
+
+
 def get_inherited_and_new_fields(class_name, all_fields, base_class_name):
     """
     Separate fields into inherited and new fields.
@@ -128,6 +220,27 @@ def get_inherited_and_new_fields(class_name, all_fields, base_class_name):
             new_fields.append((field_name, field_type))
 
     return (inherited, new_fields)
+
+
+def generate_base_class_for_oneof(base_class_name, package="com.mapfre.home.model"):
+    """
+    Generate an empty abstract base class for oneOf polymorphic fields.
+    This serves as a marker interface/base class that all oneOf types will extend.
+    Note: This class may have the same name as a field in the OpenAPI schema,
+    but it represents the polymorphic base type, not a concrete implementation.
+    """
+    java_code = f"package {package};\n\n"
+    java_code += "import lombok.Data;\n"
+    java_code += "import lombok.NoArgsConstructor;\n"
+    java_code += "import lombok.AllArgsConstructor;\n\n"
+    java_code += "@Data\n"
+    java_code += "@NoArgsConstructor\n"
+    java_code += "@AllArgsConstructor\n"
+    java_code += f"public abstract class {base_class_name} {{\n"
+    java_code += "    // Polymorphic base class for oneOf types\n"
+    java_code += "    // All concrete implementations will extend this class\n"
+    java_code += "}\n"
+    return java_code
 
 
 
@@ -163,6 +276,8 @@ def get_java_type(value, field_name=""):
 
 def generate_java_class_manual(class_name, json_data, package="com.mapfre.home.model", output_dir=None):
     """Generate Java class code manually from JSON data."""
+    global oneof_fields_map
+
     imports = set()
     imports.add("import lombok.Data;")
     imports.add("import lombok.Builder;")
@@ -171,6 +286,7 @@ def generate_java_class_manual(class_name, json_data, package="com.mapfre.home.m
 
     fields = []
     nested_classes = {}  # Track nested classes to avoid duplicates
+    generic_params = []  # Track generic type parameters for class-level generics
 
     if not isinstance(json_data, dict):
         # Handle arrays at root level
@@ -178,7 +294,21 @@ def generate_java_class_manual(class_name, json_data, package="com.mapfre.home.m
 
     for field_name, value in json_data.items():
         java_field = to_java_field_name(field_name)
-        java_type, nested_class = get_java_type_with_nested(value, field_name, nested_classes)
+
+        # Check if this field is a oneOf field
+        if class_name in oneof_fields_map and field_name in oneof_fields_map[class_name]:
+            # Use generic type parameter instead of wildcard
+            base_class = oneof_fields_map[class_name][field_name]['baseClass']
+            # Create a generic parameter name from the field name
+            generic_param_name = "T" + to_java_class_name(field_name)
+            generic_params.append(f"{generic_param_name} extends {base_class}")
+            java_type = generic_param_name
+            # Add comment indicating the possible types
+            oneof_types = oneof_fields_map[class_name][field_name]['types']
+            types_comment = f"    // Can be one of: {', '.join(oneof_types)}"
+            fields.append(types_comment)
+        else:
+            java_type, nested_class = get_java_type_with_nested(value, field_name, nested_classes)
 
         # Add imports based on type
         if "List" in java_type:
@@ -199,7 +329,14 @@ def generate_java_class_manual(class_name, json_data, package="com.mapfre.home.m
     java_code += "@Builder\n"
     java_code += "@NoArgsConstructor\n"
     java_code += "@AllArgsConstructor\n"
-    java_code += f"public class {class_name} {{\n\n"
+
+    # Add generic parameters if any oneOf fields exist
+    if generic_params:
+        generic_declaration = f"<{', '.join(generic_params)}>"
+        java_code += f"public class {class_name}{generic_declaration} {{\n\n"
+    else:
+        java_code += f"public class {class_name} {{\n\n"
+
     java_code += "\n".join(fields)
     java_code += "\n}\n"
 
@@ -213,6 +350,8 @@ def generate_java_class_manual(class_name, json_data, package="com.mapfre.home.m
 
 def generate_java_class_with_inheritance(class_name, json_data, base_class_name=None, package="com.mapfre.home.model", output_dir=None):
     """Generate Java class code with inheritance support."""
+    global oneof_fields_map
+
     imports = set()
     imports.add("import lombok.Data;")
     imports.add("import lombok.NoArgsConstructor;")
@@ -227,6 +366,7 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
 
     fields = []
     nested_classes = {}
+    generic_params = []  # Track generic type parameters for class-level generics
 
     if not isinstance(json_data, dict):
         return None
@@ -235,7 +375,18 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
     all_field_info = []
     for field_name, value in json_data.items():
         java_field = to_java_field_name(field_name)
-        java_type, nested_class = get_java_type_with_nested(value, field_name, nested_classes)
+
+        # Check if this field is a oneOf field
+        if class_name in oneof_fields_map and field_name in oneof_fields_map[class_name]:
+            # Use generic type parameter instead of wildcard
+            base_class = oneof_fields_map[class_name][field_name]['baseClass']
+            # Create a generic parameter name from the field name
+            generic_param_name = "T" + to_java_class_name(field_name)
+            generic_params.append(f"{generic_param_name} extends {base_class}")
+            java_type = generic_param_name
+        else:
+            java_type, nested_class = get_java_type_with_nested(value, field_name, nested_classes)
+
         all_field_info.append((field_name, java_field, java_type))
 
         # Add imports based on type
@@ -251,10 +402,20 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
         base_field_names = set(all_classes_fields[base_class_name])
         for orig_name, java_field, java_type in all_field_info:
             if orig_name not in base_field_names:
+                # Add comment for oneOf fields
+                if class_name in oneof_fields_map and orig_name in oneof_fields_map[class_name]:
+                    oneof_types = oneof_fields_map[class_name][orig_name]['types']
+                    types_comment = f"    // Can be one of: {', '.join(oneof_types)}"
+                    fields.append(types_comment)
                 field_def = f'    private {java_type} {java_field};'
                 fields.append(field_def)
     else:
         for orig_name, java_field, java_type in all_field_info:
+            # Add comment for oneOf fields
+            if class_name in oneof_fields_map and orig_name in oneof_fields_map[class_name]:
+                oneof_types = oneof_fields_map[class_name][orig_name]['types']
+                types_comment = f"    // Can be one of: {', '.join(oneof_types)}"
+                fields.append(types_comment)
             field_def = f'    private {java_type} {java_field};'
             fields.append(field_def)
 
@@ -270,11 +431,14 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
     java_code += "@AllArgsConstructor\n"
 
     # Add extends clause if there's a base class
+    # Add generic parameters if any oneOf fields exist
+    generic_declaration = f"<{', '.join(generic_params)}>" if generic_params else ""
+
     if base_class_name:
-        java_code += f"public class {class_name} extends {base_class_name} {{\n\n"
+        java_code += f"public class {class_name}{generic_declaration} extends {base_class_name} {{\n\n"
     else:
         java_code += "@Builder\n"
-        java_code += f"public class {class_name} {{\n\n"
+        java_code += f"public class {class_name}{generic_declaration} {{\n\n"
 
     if fields:
         java_code += "\n".join(fields)
@@ -289,6 +453,7 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
             generate_nested_class_file(nested_name, nested_data, package, output_dir)
 
     return java_code
+
 
 
 def get_java_type_with_nested(value, field_name, nested_classes_dict):
@@ -614,6 +779,9 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
     # Load inheritance relationships from OpenAPI schema
     load_openapi_inheritance('openapi.yaml')
 
+    # Load oneOf fields from OpenAPI schema
+    load_openapi_oneof_fields('openapi.yaml')
+
     # First pass: collect all class structures
     class_data = {}
     for json_file in json_files:
@@ -637,11 +805,36 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
 
     print(f"Analyzed {len(all_classes_fields)} classes\n")
 
+    # Generate base classes for oneOf fields
+    print("Pass 1.5: Generating base classes for oneOf fields...\n")
+
+    base_classes_generated = set()
+    for class_name, field_map in oneof_fields_map.items():
+        for field_name, field_info in field_map.items():
+            base_class_name = field_info['baseClass']
+            if base_class_name not in base_classes_generated:
+                # Generate empty base class
+                java_code = generate_base_class_for_oneof(base_class_name, package)
+                output_file = os.path.join(output_dir, f"{base_class_name}.java")
+                with open(output_file, 'w') as f:
+                    f.write(java_code)
+                print(f"✅ Generated base class {base_class_name}.java")
+                base_classes_generated.add(base_class_name)
+
+    if base_classes_generated:
+        print(f"\n✅ Generated {len(base_classes_generated)} base classes for oneOf fields\n")
+
     print("Pass 2: Generating Java classes...\n")
 
     # Second pass: generate all classes (without inheritance initially)
+    # Skip classes that are oneOf base classes (already generated as abstract)
     generated = 0
     for class_name, (json_path, data) in class_data.items():
+        # Skip if this class is a oneOf base class (already generated as abstract empty class)
+        if class_name in base_classes_generated:
+            print(f"⏭️  Skipping {class_name}.java (oneOf base class already generated)")
+            continue
+
         try:
             # Generate without inheritance first
             java_code = generate_java_class_manual(class_name, data, package, output_dir)
