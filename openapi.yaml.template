@@ -1,0 +1,80 @@
+# OpenAPI Specification Template
+#
+# ⚠️ IMPORTANT: This is a TEMPLATE file.
+# Replace this with your actual OpenAPI specification before running the generator scripts.
+#
+# Instructions:
+# 1. Replace this entire file with your complete OpenAPI 3.0+ specification
+# 2. Ensure all schemas are defined under components/schemas
+# 3. Use allOf for inheritance relationships if needed
+# 4. Run: python generate_json_examples.py
+# 5. Run: python generate_java_classes.py
+
+openapi: 3.0.1
+info:
+  title: Your API Title
+  description: Your API description
+  version: "1.0.0"
+
+components:
+  schemas:
+    # Example: Simple model
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: User ID
+        name:
+          type: string
+          description: User name
+        email:
+          type: string
+          format: email
+          description: User email
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+
+    # Example: Model with inheritance using allOf
+    AdminUser:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/User"  # Extends User
+        - type: object
+          properties:
+            role:
+              type: string
+              description: Admin role
+            permissions:
+              type: array
+              items:
+                type: string
+              description: List of permissions
+
+    # Example: Nested objects
+    Company:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            zipCode:
+              type: string
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+
+# Add your complete OpenAPI specification here
+# including all paths, schemas, and other components
+

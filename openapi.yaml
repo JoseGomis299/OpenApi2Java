@@ -1,0 +1,4277 @@
+openapi: 3.0.1
+info:
+  title: API Claim Home
+  description: Business API containing claim/assistance opening and management operations for Spain.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: "1.0"
+servers:
+  - description: Preproduction (PRE) (Internal consumers).
+    url: https://apisb.mapfre.net/esp/srv/api/home/1.0
+  - description: Preproduction (PRE) (External consumers).
+    url: https://apisb.mapfre.com/esp/srv/api/home/1.0
+security:
+  - mapfre_auth:
+      - esp:home/claim:create
+      - esp:home/claim:read
+      - esp:home/claim:update
+      - esp:home/assistance:create
+      - esp:home/assistance:read
+tags:
+  - name: Claim
+    description: Existing operations inside insurance claims.
+  - name: Proceeding
+    description: Existing operations to treat the set of data that encompasses the characteristics of a claim or assistance.
+  - name: Communication
+    description: Set of operations for consulting communications within a claim or assistance.
+  - name: Indemnity
+    description: Set of operations for consulting insurance indemnities.
+  - name: Document
+    description: Set of operations for document management.
+  - name: Task
+    description: Set of operations for consulting tasks of a claim or assistance.
+  - name: Assistance
+    description: Existing operations inside assistances.
+paths:
+  /claim/client:
+    get:
+      tags:
+        - Claim
+      summary: Get client data associated with a policy.
+      description: Get the client's policy details, according to the variables provided to perform the search.
+      operationId: getClaimClient
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/PolicyId"
+        - $ref: "#/components/parameters/EffectiveDate"
+      responses:
+        '200':
+          $ref: "#/components/responses/ClientClaimResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim:
+    post:
+      tags:
+        - Claim
+      summary: Generate claim.
+      description: Generate claim.
+      operationId: generateClaimPatrimonial
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      requestBody:
+        description: In create claim.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimDetail"
+        required: true
+      responses:
+        '201':
+          $ref: "#/components/responses/CreateClaimResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:create
+      x-codegen-request-body-name: ClaimDetail
+  /claims/searchClaims:
+    post:
+      tags:
+        - Claim
+      summary: Finds one or more existing claims.
+      description: Finds one or more existing claims, according to the variables provided to perform the search.
+      operationId: getClaims
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      requestBody:
+        description: Information needed to search claims.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimsSearch"
+        required: true
+      responses:
+        '200':
+          $ref: "#/components/responses/SearchClaimsResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/{claimId}:
+    get:
+      tags:
+        - Claim
+      summary: Get a certain claim.
+      description: Get a certain claim, given its unique claim ID.
+      operationId: getClaimHome
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ClaimId"
+      responses:
+        '200':
+          $ref: "#/components/responses/ClaimResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claims/getClaims:
+    get:
+      tags:
+        - Claim
+      summary: Get claims for a policy.
+      description: Get claims according to the parameters provided.
+      operationId: getCheckClaims
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/PolicyId"
+        - $ref: "#/components/parameters/EffectiveDate"
+        - $ref: "#/components/parameters/ClaimTypeCode"
+      responses:
+        '200':
+          $ref: "#/components/responses/CheckClaimsResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/interventions:
+    post:
+      tags:
+        - Claim
+      summary: Get interventions for claim.
+      description: Get interventions for claim.
+      operationId: getClaimInterventions
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      requestBody:
+        description: Initial Information of Claim.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimInterventionRequest"
+        required: true
+      responses:
+        '200':
+          $ref: "#/components/responses/ClaimInterventionResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceedings/searchProceedings:
+    post:
+      tags:
+        - Proceeding
+      summary: Finds one or more existing proceedings.
+      description: Finds one or more existing proceedings, according to the variables provided to perform the search.
+      operationId: getProceedings
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      requestBody:
+        description: Information needed to search proceedings.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProceedingsSearch"
+        required: true
+      responses:
+        '200':
+          $ref: "#/components/responses/SearchProceedingResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}:
+    get:
+      tags:
+        - Proceeding
+      summary: Get a certain proceeding.
+      description: Get a certain proceeding, given its unique proceeding ID.
+      operationId: getProceeding
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/ProceedingResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/communications:
+    get:
+      tags:
+        - Communication
+      summary: Finds one or more existing communications for a certain proceeding.
+      description: Finds one or more existing communications, according to the variables provided to perform the search.
+      operationId: getProceedingCommunications
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/CommunicationsResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/communication/{communicationId}:
+    get:
+      tags:
+        - Communication
+      summary: Gets communication detail for a certain id and type.
+      description: Gets communication detail for a certain id and type.
+      operationId: getProceedingCommunication
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/CommunicationId"
+        - $ref: "#/components/parameters/CommunicationTypeCode"
+      responses:
+        '200':
+          $ref: "#/components/responses/ComunicationResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/indemnities:
+    get:
+      tags:
+        - Indemnity
+      summary: Get the indemnities from a certain proceeding.
+      description: Get the indemnities from a certain proceeding, given its unique proceeding ID.
+      operationId: getProceedingIndemnity
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/IndemnityResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/message:
+    post:
+      tags:
+        - Proceeding
+      summary: Generate a message for a certain proceeding.
+      description: Generate a message for a certain proceeding.
+      operationId: generateProceedingMessage
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      requestBody:
+        description: Information needed to inform a message.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageDetail"
+        required: true
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Servicio creado correctamente"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:create
+  /claim/proceeding/{proceedingId}/tasks:
+    get:
+      tags:
+        - Task
+      summary: Get a certain proceeding tasks.
+      description: Get tasks from a certain proceeding.
+      operationId: getProceedingTasks
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/TasksResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/task/{taskId}:
+    get:
+      tags:
+        - Task
+      summary: Finds an associated task for a certain proceeding.
+      description: Finds an associated task according to the variables provided to perform the search.
+      operationId: getProceedingTask
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        '200':
+          $ref: "#/components/responses/TaskResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/task/{taskId}/documents:
+    get:
+      tags:
+        - Document
+      summary: Get task's documents.
+      description: Get task's documents.
+      operationId: getProceedingTaskDocuments
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        '200':
+          $ref: "#/components/responses/ProceedingTaskDocumentsResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/task/{taskId}/document:
+    post:
+      tags:
+        - Document
+      summary: Create task document.
+      description: Create task document.
+      operationId: postProceedingTaskDocument
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        description: Information needed to create a Document.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCreate"
+        required: true
+      responses:
+        '201':
+          $ref: "#/components/responses/CreateDocumentResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/documents:
+    get:
+      tags:
+        - Document
+      summary: Get proceeding's documents.
+      description: Get proceeding's documents.
+      operationId: getProceedingDocuments
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/ProceedingDocumentsResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/document:
+    post:
+      tags:
+        - Document
+      summary: Create proceeding documents.
+      description: Create proceeding documents.
+      operationId: postProceedingDocument
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      requestBody:
+        description: Information needed to create a Document.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentCreate"
+        required: true
+      responses:
+        '201':
+          $ref: "#/components/responses/CreateDocumentResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+  /claim/proceeding/{proceedingId}/document/{documentId}:
+    get:
+      tags:
+        - Document
+      summary: Get proceeding document.
+      description: Get proceeding document.
+      operationId: getProceedingDocument
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        '200':
+          $ref: "#/components/responses/GetDocumentResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:read
+    put:
+      tags:
+        - Document
+      summary: Update document metadata.
+      description: Update document metadata.
+      operationId: putProceedingDocument
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        description: Information needed to update document metadata.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentMetadataCreate"
+            example:
+              documentTitle: "Factura_22345"
+              issueDocumentTypeCode: "Info"
+              issueDocumentSubTypeCode: "272"
+              description: "Factura de los trabajos de pintura"
+              documentDate: "2023-03-14T12:48:19.954Z"
+              authors: ["JLOPEZ"]
+              reportOrigin: "Pintores SA"
+              commSender: "sender@test.com"
+              commAddressee: "addressee@test.com"
+        required: true
+      responses:
+        '200':
+          description: Successful response.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/claim:update
+  /claim/assistance/client:
+    get:
+      tags:
+        - Assistance
+      summary: Get client data associated with a policy or contract.
+      description: Get the client's policy details or contract details, according to the variables provided to perform the search.
+      operationId: getAssistanceClient
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/PolicyId"
+        - $ref: "#/components/parameters/EffectiveDate"
+      responses:
+        '200':
+          $ref: "#/components/responses/ClientAssistanceResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance:
+    post:
+      tags:
+        - Assistance
+      summary: Generate assistance.
+      description: Generate assistance.
+      operationId: generateAssistance
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      requestBody:
+        description: In create assistance.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistanceCreateRequest"
+        required: true
+      responses:
+        '201':
+          $ref: "#/components/responses/AssistanceCreateResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:create
+      x-codegen-request-body-name: AssistanceCreateRequest
+  /claim/assistance/jobs:
+    get:
+      tags:
+        - Assistance
+      summary: Get a list of assistance jobs.
+      description: Get a list of assistance jobs.
+      operationId: getAssistanceJobs
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ZipCode"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssistanceJobsResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistances/searchAssistances:
+    post:
+      tags:
+        - Assistance
+      summary: Finds one or more existing assistances.
+      description: Finds one or more existing assistances, according to the variables provided to perform the search.
+      operationId: getAssistances
+      requestBody:
+        description: Information needed to search assistances.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatrimonialAssistanceSearchRequest"
+        required: true
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      responses:
+        '200':
+          $ref: "#/components/responses/SearchAssisResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/{assistanceId}:
+    get:
+      tags:
+        - Assistance
+      summary: Get detailed information for a certain assistance.
+      description: Get a certain assistance, given its unique assistance ID.
+      operationId: getAssistanceDetail
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/AssistanceId"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssistanceDetailResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceedings/searchProceedings:
+    post:
+      tags:
+        - Proceeding
+      summary: Finds one or more existing assistance proceedings.
+      description: >-
+        Finds one or more existing assistance proceedings, according to the variables
+        provided to perform the search.
+      operationId: getAssistanceProceedings
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+      requestBody:
+        description: Information needed to search assistance proceedings.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatrimonialAssistancesProceedingsSearchRequest"
+        required: true
+      responses:
+        '200':
+          $ref: "#/components/responses/SearchAssisProcedResponse"
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceeding/{proceedingId}:
+    get:
+      tags:
+        - Proceeding
+      summary: Gets assistance proceeding detailed info.
+      description: Gets assistance proceeding detailed info.
+      operationId: getAssisProceedDetail
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssisProceedingResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceeding/{proceedingId}/tasks:
+    get:
+      tags:
+        - Task
+      summary: Get a certain assistance proceeding tasks.
+      description: Get tasks from a certain assistance proceeding.
+      operationId: getAssisProceedTasks
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssistanceTasksResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceeding/{proceedingId}/task/{taskId}:
+    get:
+      tags:
+        - Task
+      summary: Finds an associated task for a certain assistance proceeding.
+      description: Finds an associated task according to the variables provided to perform the search.
+      operationId: getAssisProceedTask
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssistanceTaskResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceeding/{proceedingId}/communications:
+    get:
+      tags:
+        - Communication
+      summary: Finds one or more existing communications for a certain assistance proceeding.
+      description: Finds one or more existing communications, according to the variables provided to perform the search.
+      operationId: getAssisProceedComs
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssistanceComsResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceeding/{proceedingId}/communication/{communicationId}:
+    get:
+      tags:
+        - Communication
+      summary: Gets communication detail for a certain id and type.
+      description: Gets communication detail for a certain id and type.
+      operationId: getAssisProceedCom
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+        - $ref: "#/components/parameters/CommunicationId"
+        - $ref: "#/components/parameters/CommunicationTypeCode"
+      responses:
+        '200':
+          $ref: "#/components/responses/AssistanceComResponse"
+        '204':
+          description: No content.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:read
+  /claim/assistance/proceeding/{proceedingId}/message:
+    post:
+      tags:
+        - Proceeding
+      summary: Generate a message for a certain assistance proceeding.
+      description: Generate a message for a certain assistance proceeding.
+      operationId: generateAssisProceedMsg
+      parameters:
+        - $ref: "#/components/parameters/AcceptLanguageHeader"
+        - $ref: "#/components/parameters/X-Request-applicationId"
+        - $ref: "#/components/parameters/X-Request-processId"
+        - $ref: "#/components/parameters/ProceedingId"
+      requestBody:
+        description: Information needed to inform a message.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageDetail"
+        required: true
+      responses:
+        '201':
+          description: Created.
+        '400':
+          $ref: "#/components/responses/BadRequestResponse"
+        '401':
+          $ref: "#/components/responses/UnauthorizedResponse"
+        '403':
+          $ref: "#/components/responses/ForbiddenResponse"
+        '404':
+          $ref: "#/components/responses/NotFoundResponse"
+        '500':
+          $ref: "#/components/responses/InternalServerErrorResponse"
+      security:
+        - mapfre_auth:
+            - esp:home/assistance:create
+components:
+  schemas:
+    DocumentCreate:
+      type: object
+      description: Document object.
+      title: ""
+      properties:
+        documentMetadataCreate:
+          $ref: "#/components/schemas/DocumentMetadataCreate"
+        documentData:
+          $ref: "#/components/schemas/DocumentData"
+    DocumentMetadataCreate:
+      type: object
+      description: Metadata of the document.
+      title: ""
+      properties:
+        documentTitle:
+          $ref: "#/components/schemas/DocumentMetadata/properties/documentTitle"
+        issueDocumentTypeCode:
+          $ref: "#/components/schemas/DocumentMetadata/properties/issueDocumentTypeCode"
+        issueDocumentSubTypeCode:
+          $ref: "#/components/schemas/DocumentMetadata/properties/issueDocumentSubTypeCode"
+        description:
+          $ref: "#/components/schemas/DocumentMetadata/properties/description"
+        documentDate:
+          $ref: "#/components/schemas/DocumentMetadata/properties/documentDate"
+        authors:
+          $ref: "#/components/schemas/DocumentMetadata/properties/authors"
+        reportOrigin:
+          $ref: "#/components/schemas/DocumentMetadata/properties/reportOrigin"
+        commSender:
+          $ref: "#/components/schemas/DocumentMetadata/properties/commSender"
+        commAddressee:
+          $ref: "#/components/schemas/DocumentMetadata/properties/commAddressee"
+    DocumentBasic:
+      type: object
+      description: Document object.
+      title: ""
+      properties:
+        documentMetadataBasic:
+          $ref: "#/components/schemas/DocumentMetadataBasic"
+        documentData:
+          $ref: "#/components/schemas/DocumentData"
+    DocumentMetadataBasic:
+      type: object
+      description: Metadata of the document.
+      title: ""
+      properties:
+        documentTitle:
+          $ref: "#/components/schemas/DocumentMetadata/properties/documentTitle"
+        mimeType:
+          type: string
+          description:
+            "Document Type, for example: audio/aac, application/x-abiword,
+            application/octet-stream, video/x-msvideo."
+    Document:
+      type: object
+      description: Document object.
+      title: ""
+      properties:
+        documentId:
+          type: string
+          readOnly: true
+          description: Unique Id for the document.
+        documentMetadata:
+          $ref: "#/components/schemas/DocumentMetadata"
+    DocumentData:
+      type: object
+      description: Data of the document.
+      title: ""
+      properties:
+        documentContent:
+          type: string
+          description: Base64-encoded file content.
+          format: byte
+    DocumentMetadata:
+      type: object
+      description: Metadata of the document.
+      properties:
+        name:
+          type: string
+          readOnly: true
+          description: Indicates the document name.
+        documentTitle:
+          type: string
+          description: Title of the document.
+        issueDocumentTypeCode:
+          type: string
+          description: This code is used to identify the type of document from the functional point of view (letter of payment of a receipt, conditions of the policy, file of a claim, etc). It is necessary that the document manager of the country has implemented and supports this field.
+        issueDocumentTypeDesc:
+          type: string
+          description: Description of issue document type.
+        issueDocumentSubTypeCode:
+          type: string
+          description: This code is used to identify the subtype of document from the functional point of view.
+        issueDocumentSubTypeDesc:
+          type: string
+          readOnly: true
+          description: Description of issue document subtype.
+        description:
+          type: string
+          description: Contains the document description.
+        documentDate:
+          type: string
+          format: date-time
+          description: Date of the document.
+        creationDate:
+          type: string
+          format: date-time
+          description: Date in which the document is received/generated.
+        modificationDate:
+          type: string
+          format: date-time
+          description: Date in which the document is modified.
+        size:
+          type: number
+          readOnly: true
+          description: Document Size.
+        origin:
+          type: string
+          description: Origin application.
+        authors:
+          type: array
+          description: Document authors.
+          items:
+            type: string
+        reportOrigin:
+          type: string
+          description: Report origin.
+        commSender:
+          type: string
+          description: Communication sender.
+        commAddressee:
+          type: string
+          description: Communication addressee.
+    Claim:
+      type: object
+      description: Claim data.
+      allOf:
+        - $ref: "#/components/schemas/ClaimBase"
+        - type: object
+          properties:
+            claimCaller:
+              allOf:
+                - $ref: "#/components/schemas/Relationship"
+                - $ref: "#/components/schemas/PatrimonialContactBase"
+            claimOcurrenceAddress:
+              $ref: "#/components/schemas/AddressBase"
+    ClaimBase:
+      type: object
+      description: Claim base data.
+      properties:
+        claimId:
+          type: string
+          description: Identifier code of claim.
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract
+            to identify it.
+        claimCauseCode:
+          type: string
+          description: Cause code of claim.
+          example: "02"
+        claimCauseDesc:
+          type: string
+          description: Cause description of claim.
+          example: "CRISTALES"
+        claimDesc:
+          type: string
+          description: A reporting of what happened on this claim.
+        claimStatusCode:
+          type: string
+          description: >-
+            Code of the status. Allowed values: P - Pendiente. T - Terminado. L
+            - Liquidado.
+          example: P
+        claimStatusDesc:
+          type: string
+          description: >-
+            Description of the status.Allowed values: P - Pendiente, T -
+            Terminado, L - Liquidado.
+          example: Pendiente
+        effectiveDate:
+          type: string
+          description: Date when the claim actually occurs.
+          format: date-time
+        communicationDate:
+          type: string
+          description: Date when the claim is communicated.
+          format: date-time
+        settlementDate:
+          type: string
+          description: Date when the claim is settle.
+          format: date-time
+        paymentAmount:
+          type: number
+          description: Claim amount.
+          multipleOf: 0.01
+        proceedingCounter:
+          type: integer
+          description: Quantity of proceedings associated to his claim.
+    ContactBase:
+      type: object
+      description: Contact base data.
+      properties:
+        contactName:
+          $ref: "#/components/schemas/PersonName"
+        contactIdentificationMethod:
+          $ref: "#/components/schemas/IdentificationMethod"
+        contactMethods:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContactMethod"
+        contactAddress:
+          $ref: "#/components/schemas/Address"
+    CallerInfo:
+      type: object
+      description: Caller info.
+      properties:
+        callerRelationshipCode:
+          type: string
+          description: "Caller Relationship Code. Allowed values: 01 - INSURED/POLICYHOLDER. 02 - FAMILY OF THE INSURED. 03 - ADMINISTRATOR. 04 - EMPLOYEE. 05 - AGENT. 99 - OTHERS."
+        callerContact:
+          $ref: "#/components/schemas/ContactBase"
+    MessageDetail:
+      required:
+        - name
+        - messageText
+      type: object
+      description: Object that encapsulates the information of the message related to a proceed.
+      properties:
+        name:
+          type: string
+          description: Full name of sender.
+          example: "ANGEL"
+        contact:
+          $ref: "#/components/schemas/MessageContact"
+        address:
+          $ref: "#/components/schemas/MessageAddress"
+        messageText:
+          type: string
+          description: Text of the message.
+          example: "Aplazamiento"
+    MessageContact:
+      required:
+        - phone
+        - email
+      type: object
+      description: Message contact.
+      properties:
+        phone:
+          type: string
+          description: Phone number.
+          example: "645777223"
+        email:
+          type: string
+          description: Email address.
+          example: "correo@correo.es"
+        fax:
+          type: string
+          description: Fax number.
+          example: "914324555"
+    MessageAddress:
+      type: object
+      description: Message address.
+      properties:
+        roadTypeCode:
+          type: string
+          description: Indicates the code of the road type. Allowed values in '/common/roadTypes' resource of the API Catalogs.
+          example: "M30"
+        addressName:
+          type: string
+          description: Indicates the street address.
+          example: "Calle membrilla"
+        addressNum:
+          type: string
+          description: Indicates the number of the street.
+          example: "32"
+        zipCode:
+          type: string
+          description: Indicates the zip code.
+          example: "45800"
+        townDesc:
+          type: string
+          description: Indicates the name of the town. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+          example: "Toledo"
+        provinceCode:
+          type: string
+          description: Province Identifier. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+          example: "Toledo"
+    ContactMethod:
+      type: object
+      description: This resource gathers the contact methods preferred by the Person, such as e-mail, telephone, etc. or the communication Channel through which this Claim has been created.
+      properties:
+        contactMethodId:
+          type: string
+          description: Unique Id for the contact media.
+        contactMethodTypeCode:
+          type: string
+          description: "Communication Channel through which this Claim has been created. Allowed values:  1 - TELEPHONE. 2 - FAX. 3 - IN PERSON. 4 - BY LETTER. 5 - SIRED. 6 - EMAIL. 7 - OTHER FORMS. 8 - W - CAPWEB IOM. 9 - W - CAPWEB Affinity. 0 - W - CAPWEB Gescom."
+          enum:
+            - "1"
+            - "2"
+            - "3"
+            - "4"
+            - "5"
+            - "6"
+            - "7"
+            - "8"
+            - "9"
+            - "0"
+        contactMethodValue:
+          type: string
+          description: Indicates the value for the contact media according with the type.
+        contactName:
+          type: string
+          description: Indicates the contact media name.
+        contactPreferenceInd:
+          type: boolean
+          description: Flag indicating if this contact media is the preferred by the client or not.
+        contactCheckInd:
+          type: boolean
+          description: Flag indicating if this contact media is validated or not.
+        contactDaytimeSlot:
+          type: string
+          description: Time slot where the client allows to be reached through the contact media.
+        contactObs:
+          type: string
+          description: Indicates additional or complementary information for the contact media record.
+    DetailedDamageDescription:
+      type: object
+      description: Detailed damage description data.
+      allOf:
+        - $ref: "#/components/schemas/DamageDescription"
+        - type: object
+          properties:
+            infoDamage:
+              $ref: "#/components/schemas/DamageInfoDescription"
+    DamageDescription:
+      type: object
+      description: Damage description data.
+      required:
+        - damageCode
+        - damageDesc
+      properties:
+        damageCode:
+          type: string
+          description: Damage Code. Allowed values in Damage Types Catalog.
+        damageDesc:
+          type: string
+          description: Damage Description.
+    ActivityDescription:
+      type: object
+      description: Activity data. Allowed values in Theft Activities Catalog.
+      required:
+        - activityCode
+        - activityDesc
+      properties:
+        activityCode:
+          type: string
+          description: Activity Code.
+        activityDesc:
+          type: string
+          description: Activity Description.
+    DamageObservation:
+      type: object
+      description: Damage data with observation.
+      allOf:
+        - $ref: "#/components/schemas/DamageDescription"
+        - type: object
+          properties:
+            damageObs:
+              type: string
+              description: Damage observations.
+    DamageInfoDescription:
+      type: object
+      description: Damage info description data.
+      required:
+        - damageInfoCode
+        - damageInfoDesc
+      properties:
+        damageInfoCode:
+          type: string
+          description: Damage Code. Allowed values in Damage Types Catalog.
+        damageInfoDesc:
+          type: string
+          description: Damage Description.
+    ApplianceDamagesInfo:
+      type: object
+      description: This operation allows registering an appliance claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - damage
+        - brandCode
+        - modelName
+        - years
+        - warranty
+      properties:
+        damage:
+          description: Damages cause.
+          allOf:
+            - $ref: "#/components/schemas/DamageDescription"
+        brandCode:
+          type: string
+          description: Brand code. Allowed values in Brand Catalog.
+        modelName:
+          type: string
+          description: Model Name.
+        years:
+          type: string
+          description: Old appliance.
+        warranty:
+          type: string
+          description: Appliance warranty. Allowed values 'S' - Si', 'N' - No, 'X' - No sabe.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    DIYDamagesInfo:
+      type: object
+      description: This operation allows registering DIY-type claims. If the process ends correctly, it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - damages
+      properties:
+        damages:
+          description: Damages.
+          allOf:
+            - $ref: "#/components/schemas/Damages"
+        waterDamage:
+          type: string
+          description: Water Damage. Allowed values are 'S' - Si', 'N' - No, 'X' - No sabe.
+        waterDamageInfo:
+          type: string
+          description: Water Damage Info.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    LegalDamagesInfo:
+      type: object
+      description: This operation allows registering a Legal type claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      properties:
+        claimsTo:
+          type: string
+          description: Details of the person you are claiming.
+        claimedFor:
+          type: string
+          description: Data of the person who is claiming you.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    WaterDamagesInfo:
+      description: This operation allows registering a Water-type claim. If the process ends correctly, it will return the generated file number, if not, it will return an error indicating the problem.
+      type: object
+      required:
+        - detailedDescription
+        - damages
+      properties:
+        detailedDescription:
+          type: string
+          description: Detailed description.
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        responsiblePersonDamagesData:
+          type: array
+          description: List of responsible persons.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        damages:
+          description: Damages.
+          allOf:
+            - $ref: "#/components/schemas/Damages"
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether this client has repair himself his damages or not.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        wantsToRepairInd:
+          type: boolean
+          description: Flag indicating whether this client wants to repair his damages or not.
+        massiveWaterOutletInd:
+          type: boolean
+          description: Flag indicating whether there has been a massive water outlet or not.
+        stopcockClosedInd:
+          type: boolean
+          description: Flag indicating whether the stopcock has been shut or not.
+        immediateAssistanceInd:
+          type: boolean
+          description: Flag indicating inmediate assistance.
+        immediateAssistanceTime:
+          type: string
+          description: Assistance desired time. Allowed values in Assistance Time Catalog.
+          example: "15:00"
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    RepairedDamages:
+      type: object
+      description: Repaired damages.
+      properties:
+        cauRepairedInd:
+          type: boolean
+          description: Flag indicating whether the cau has been repaired or not.
+        repairedDamages:
+          type: string
+          description: Repaired damage.
+        pendingRepairDamages:
+          type: string
+          description: Damage pending repair.
+        generatedExpensesInd:
+          type: boolean
+          description: Flag indicating the expenses generated.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        repairNetworkInd:
+          type: string
+          description: Flag indicating the network reparations.
+        partRepairInd:
+          type: boolean
+          description: Flag indicating the part repair.
+    AllRiskDamagesInfo:
+      type: object
+      description: This operation allows registering an All Risk type claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - placeDamages
+        - damages
+        - selfRepairInd
+      properties:
+        damages:
+          description: Damages.
+          allOf:
+            - $ref: "#/components/schemas/DetailedDamages"
+        placeDamages:
+          description: Damages place.
+          allOf:
+            - $ref: "#/components/schemas/Damages"
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether this client wants to repair his damages or not.
+        repairAmn:
+          type: number
+          description: Amount of damages.
+        requiresTechnicalInd:
+          type: boolean
+          description: Flag indicating whether if it is required a technical intervention.
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    AtmosphericDamagesInfo:
+      type: object
+      description: This operation allows registering an Atmospheric Phenomena type claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - livingPlace
+        - startDate
+        - endDate
+        - detailedDescription
+        - causeDamages
+        - damages
+        - selfRepairInd
+      properties:
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        detailedDescription:
+          type: string
+          description: Detailed description.
+        causeDamages:
+          description: Damages cause.
+          allOf:
+            - $ref: "#/components/schemas/DamageDescription"
+        filtrationDamage:
+          description: Damages caused by filtration.
+          allOf:
+            - $ref: "#/components/schemas/DamageObservation"
+        damages:
+          description: Damages.
+          allOf:
+            - $ref: "#/components/schemas/Damages"
+        rentedLivingPlace:
+          type: string
+          description: Rented living place . Allowed values '1' - Alquiler de temporada, '2' - Alquiler.
+        startDate:
+          type: string
+          format: date
+          description: Start date of claim.
+        endDate:
+          type: string
+          format: date
+          description: End date of claim.
+        moreThanOneTimeDamagesInd:
+          type: boolean
+          description: Flag indicating whether the damage has occurred more than once in the last year.
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether this client has repair himself his damages or not.
+        selfRepairDesc:
+          type: string
+          description: Repaired damages.
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    KeysLossDamagesInfo:
+      type: object
+      description: This operation allows registering a loss of keys type claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - lockReplacementInd
+      properties:
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        wantsToRepairInd:
+          type: boolean
+          description: Flag indicating whether this client wants to repair his damages or not.
+        lockReplacementInd:
+          type: boolean
+          description: Flag indicating whether there is lock replacement or not.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        insuredRequestInd:
+          type: boolean
+          description: Flag indicating whether the insured requested the assistance or not.
+        insuredReceivesTheProfesssionalInd:
+          type: boolean
+          description: Flag indicating whether the insured received the professional or not.
+        attentionDNI:
+          type: string
+          description: Attention person document number.
+        attentionPerson:
+          $ref: "#/components/schemas/PersonName"
+        keysUsedByThirdsInd:
+          type: boolean
+          description: Flag indicating whether there is a possibility that the keys will be used by third parties or not.
+        accessInsuredRiskInd:
+          type: boolean
+          description: Flag indicating whether there is a possibility that the insured risk will be accessible or not.
+        immediateAssistanceInd:
+          type: boolean
+          description: Flag indicating inmediate assistance.
+        immediateAssistanceTime:
+          type: string
+          description: Assistance desired time. Allowed values in Assistance Time Catalog.
+          example: "15:00"
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    ElectricDamagesInfo:
+      type: object
+      description: This operation allows registering an electrical damage type claim. If the process ends correctly, it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - detailedDescription
+        - damages
+        - company
+        - hours
+        - nearbyWorksInd
+        - affectedNeighborsInd
+        - selfRepairInd
+      properties:
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        detailedDescription:
+          type: string
+          description: Detailed damage description.
+        damages:
+          $ref: "#/components/schemas/Damages"
+        company:
+          type: string
+          description: Company.
+        hours:
+          type: number
+          description: Hours without electricity.
+        contractNumber:
+          type: string
+          description: Contract number.
+        nearbyWorksInd:
+          type: boolean
+          description: Flag indicating whether there are works nearby or not.
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether this client has repair himself his damages or not.
+        selfRepairDesc:
+          type: string
+          description: Repaired damages.
+        affectedNeighborsInd:
+          type: boolean
+          description: Flag indicating whether there are neighbors affected or not.
+        invoiceInd:
+          type: boolean
+          description: Flag indicating whether there is an invoice or not.
+        brandName:
+          type: string
+          description: Brand.
+        modelName:
+          type: string
+          description: Model.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        totalAbsenceOfLightInd:
+          type: boolean
+          description: Flag indicating whether there is total absence of light or not.
+        partialAbsenceOfLightInd:
+          type: boolean
+          description: Flag indicating whether there is partial absence of light or not.
+        requiresTechnicalInd:
+          type: boolean
+          description: Flag indicating whether if it is required a technical intervention.
+        immediateAssistanceInd:
+          type: boolean
+          description: Flag indicating inmediate assistance.
+        immediateAssistanceTime:
+          type: string
+          description: Assistance desired time. Allowed values in Assistance Time Catalog.
+          example: "15:00"
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    GlassBreakageDamagesInfo:
+      type: object
+      description: This operation allows registering a glass breakage type claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - detailedDescription
+        - damages
+        - selfRepairInd
+      properties:
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        responsiblePersonDamagesData:
+          type: array
+          description: List of responsible persons.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        detailedDescription:
+          type: string
+          description: Detailed description.
+        damages:
+          $ref: "#/components/schemas/Damages"
+        unprotectedInsuredRiskInd:
+          type: boolean
+          description: Flag indicating whether the insured risk is unprotected or not.
+        materialOrPersonalRiskInd:
+          type: boolean
+          description: Flag indicating whether there is risk of personal or material accidents or not.
+        ceramicBreakageHobInd:
+          type: boolean
+          description: Flag indicating whether there is breakage of glass ceramic hob or not.
+        sanitaryDevicesBreakageInd:
+          type: boolean
+          description: Flag indicating whether there is breakage of sanitary devices or not.
+        noUseForBreakInd:
+          type: boolean
+          description: Flag indicating whether the break prevents its use or not.
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether this client has repair himself his damages or not.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        requiresTechnicalInd:
+          type: boolean
+          description: Flag indicating whether if it is required a technical intervention.
+        immediateAssistanceInd:
+          type: boolean
+          description: Flag indicating inmediate assistance.
+        immediateAssistanceTime:
+          type: string
+          description: Assistance desired time. Allowed values in Assistance Time Catalog.
+          example: "15:00"
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    TheftDamagesInfo:
+      type: object
+      description: This operation allows registering a Theft-type claim. If the process ends correctly, it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - detailedDescription
+        - damages
+        - complaintInd
+        - invoicesInd
+        - materialDamageInd
+      properties:
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        detailedDescription:
+          type: string
+          description: Detailed description.
+        damages:
+          $ref: "#/components/schemas/Damages"
+        complaintInd:
+          type: boolean
+          description: Flag indicating whether there has been a complaint or not.
+        invoicesInd:
+          type: boolean
+          description: Flag indicating whether there have been invoices or not.
+        materialDamageInd:
+          type: boolean
+          description: Flag indicating whether there has been material damages or not.
+        materialDamageDesc:
+          type: string
+          description: Material damages description.
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether the reparation was done by a particular or not.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        unprotectedInsuredRiskInd:
+          type: boolean
+          description: Flag indicating whether the insured risk is unprotected or not.
+        impossibleHomeAccessInd:
+          type: boolean
+          description: Flag indicating whether there is a possibility that the insured risk cannot be accessed.
+        activities:
+          type: array
+          description: Activities list.
+          items:
+            $ref: "#/components/schemas/ActivityDescription"
+        immediateAssistanceInd:
+          type: boolean
+          description: Flag indicating inmediate assistance.
+        immediateAssistanceTime:
+          type: string
+          description: Assistance desired time. Allowed values in Assistance Time Catalog.
+          example: "15:00"
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    CivilLiabilityDamagesInfo:
+      type: object
+      description: This operation allows registering a Civil Liability claim. If the process ends correctly, it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - isWaterDamage
+      properties:
+        isWaterDamage:
+          type: boolean
+          description: Flag indicating whether there is water damages.
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    TheftTriedDamagesInfo:
+      type: object
+      description: This operation allows registering an Attempted Theft type claim, if the process ends correctly it will return the generated file number, if not, it will return an error indicating the problem.
+      required:
+        - detailedDescription
+        - damages
+        - selfRepairInd
+      properties:
+        detailedDescription:
+          type: string
+          description: Detailed description.
+        harmPersonDamagesData:
+          type: array
+          description: List of harm person.
+          items:
+            $ref: "#/components/schemas/PersonDamagesData"
+        damages:
+          $ref: "#/components/schemas/Damages"
+        selfRepairInd:
+          type: boolean
+          description: Flag indicating whether the reparation was done by a particular or not.
+        repairAmn:
+          type: number
+          description: Repair amount.
+        requiresTechnicalInd:
+          type: boolean
+          description: Flag indicating whether if it is required a technical intervention.
+        impossibleHomeAccessInd:
+          type: boolean
+          description: Flag indicating whether there is a possibility that the insured risk cannot be accessed.
+        immediateAssistanceInd:
+          type: boolean
+          description: Flag indicating inmediate assistance.
+        immediateAssistanceTime:
+          type: string
+          description: Assistance desired time. Allowed values in Assistance Time Catalog.
+          example: "15:00"
+        documentationInd:
+          type: boolean
+          description: Flag indicating whether if exists aditional documentation.
+        availabilitiesRecord:
+          type: array
+          description: Availability of the client to attend the professional.
+          items:
+            $ref: "#/components/schemas/AvailabilityRecord"
+    AvailabilityRecord:
+      type: object
+      description: Client availability record.
+      properties:
+        activityCode:
+          type: string
+          description: Activity Code.
+          example: "01"
+        interventionDate:
+          type: string
+          description: Intervention date.
+          format: date-time
+        shift:
+          type: string
+          description: Availability shift.
+          example: "T"
+    PersonDamagesData:
+      type: object
+      description: Information about person involved in damage.
+      allOf:
+        - properties:
+            damageDesc:
+              type: string
+              description: Damage detailed description.
+            contactName:
+              $ref: "#/components/schemas/PersonName"
+            contactMethod:
+              type: array
+              items:
+                $ref: "#/components/schemas/ContactMethodBase"
+            correspondence:
+              type: object
+              properties:
+                address:
+                  $ref: "#/components/schemas/HomeAddress"
+            additionalInfo:
+              type: object
+              properties:
+                company:
+                  type: string
+                  description: Harm person company name.
+                observations:
+                  type: string
+                  description: Free text observations.
+    Damages:
+      type: array
+      description: Damages list.
+      minLength: 1
+      items:
+        $ref: "#/components/schemas/DamageDescription"
+    DetailedDamages:
+      type: array
+      description: Detailed damages list.
+      items:
+        $ref: "#/components/schemas/DetailedDamageDescription"
+    Address:
+      properties:
+        addressId:
+          type: string
+          description: Unique Id for the Address.
+          readOnly: true
+        roadTypeCode:
+          type: string
+          description: Indicates the type of road such as avenue, street, etc.
+        addressName:
+          type: string
+          description: Indicates the name of the street.
+        addressNum:
+          type: string
+          description: Indicates the number of the street.
+        zipCode:
+          type: string
+          description: Indicates the zip code.
+        provinceCode:
+          type: string
+          description: Province Identifier.
+        provinceDesc:
+          type: string
+          description: Indicates the province.
+        municipalityCode:
+          type: string
+          description: Municipality code.
+        municipalityDesc:
+          type: string
+          description: Indicates the name of the district/municipality.
+        countryCode:
+          type: string
+          description: Country code.
+        latitudeCoordinate:
+          type: string
+          description: Latitude geocode.
+        longitudeCoordinate:
+          type: string
+          description: Geocoding longitude.
+        addressAdditionalInfo:
+          type: string
+          description: Additional or complementary information for the address.
+        preferenceAddressInd:
+          type: boolean
+          description: Flag indicating if this is the preferred address.
+        addressForeignCountryInd:
+          type: boolean
+          description: Flag indicating if the address provided by the driver is in a foreign country, as stated in the zip / postal code.
+      description: This resource gathers address records, including the typification for each of them.
+    IdentificationMethod:
+      type: object
+      description:
+        The identification method is able to unequivocally recognize the
+        Person in the system with the information from official documents or identification
+        reference in its country.
+      properties:
+        identityMethodId:
+          type: string
+          description: Unique Id for the Identity Document.
+        identityDocumentTypeCode:
+          type: string
+          description: "Indicates the type for the identity document. Allowed values: 02- NIF. 04- NIE. 05- CIF. 08- Foreign document (e.g. Passport)."
+          enum:
+            - "02"
+            - "04"
+            - "05"
+            - "08"
+        identityDocumentNumber:
+          type: string
+          description: Indicates the Identity document number.
+        identityDocumentExpirationDate:
+          type: string
+          description: Relates the expiration date for the document.
+          format: date-time
+        identityDocumentExpeditionDate:
+          type: string
+          description: Relates the expedition date for the document record.
+          format: date-time
+    ClaimDetail:
+      type: object
+      description: Claim detail.
+      required:
+        - policyId
+        - claimTypeCode
+        - effectiveDate
+        - report
+      allOf:
+        - type: object
+          properties:
+            policyId:
+              type: string
+              description: >-
+                Numerical reference assigned to each insurance contract to identify it.
+            claimTypeCode:
+              type: string
+              description: Indicates the type of Claim. Allowed values in Claim Types Catalog.
+              example: "TRA"
+            effectiveDate:
+              type: string
+              description: Date when the claim actually occurs.
+              format: date-time
+            claimOcurrenceAddress:
+              $ref: "#/components/schemas/OccurrenceAddress"
+            claimCaller:
+              allOf:
+                - type: object
+                  required:
+                    - relationshipCode
+                  properties:
+                    relationshipCode:
+                      type: string
+                      description: Caller relationship code. Allowed values in Claim Relationships Catalog.
+                      example: "02"
+                - $ref: "#/components/schemas/PatrimonialContactBase"
+            correspondence:
+              $ref: "#/components/schemas/DetailedCorrespondence"
+            report:
+              type: string
+              description: A reporting of what happened on this claim.
+            claimDamagesSpecific:
+              oneOf:
+                - $ref: "#/components/schemas/ApplianceDamagesInfo"
+                - $ref: "#/components/schemas/DIYDamagesInfo"
+                - $ref: "#/components/schemas/LegalDamagesInfo"
+                - $ref: "#/components/schemas/AllRiskDamagesInfo"
+                - $ref: "#/components/schemas/AtmosphericDamagesInfo"
+                - $ref: "#/components/schemas/KeysLossDamagesInfo"
+                - $ref: "#/components/schemas/ElectricDamagesInfo"
+                - $ref: "#/components/schemas/GlassBreakageDamagesInfo"
+                - $ref: "#/components/schemas/TheftDamagesInfo"
+                - $ref: "#/components/schemas/CivilLiabilityDamagesInfo"
+                - $ref: "#/components/schemas/WaterDamagesInfo"
+                - $ref: "#/components/schemas/TheftTriedDamagesInfo"
+    OccurrenceAddress:
+      type: object
+      description: Occurrence address.
+      required:
+        - addressName
+        - zipCode
+        - townDesc
+      properties:
+        addressName:
+          type: string
+          description: Indicates the street address.
+          example: "GERMANIES"
+        zipCode:
+          type: string
+          description: Indicates the zip code.
+          example: "46740"
+        townDesc:
+          type: string
+          description: Indicates the name of the town.
+          example: "CARCAIXENT"
+        provinceCode:
+          type: string
+          description: Province Identifier. Allowed values in Province Catalog.
+          example: "46"
+    Relationship:
+      type: object
+      description: Relationship.
+      properties:
+        relationshipCode:
+          type: string
+          description: Relationship code.
+          example: "02"
+        relationshipDesc:
+          type: string
+          description: Relationship description.
+          example: "FAMILIAR DEL ASEGURADO"
+    PatrimonialContactBase:
+      type: object
+      description: Patrimonial contact base.
+      properties:
+        contactName:
+          allOf:
+            - $ref: "#/components/schemas/PersonName"
+        contactMethod:
+          type: array
+          minLength: 1
+          items:
+            $ref: "#/components/schemas/ContactMethodBase"
+    GeneralContactBase:
+      type: object
+      description: General contact base.
+      properties:
+        contactName:
+          allOf:
+            - $ref: "#/components/schemas/PersonName"
+        contactMethod:
+          type: array
+          minLength: 1
+          items:
+            $ref: "#/components/schemas/ContactMethodBase"
+    PatrimonialContactSingle:
+      type: object
+      description: Patrimonial contact single data.
+      properties:
+        documentId:
+          type: string
+          description: Document identifier.
+          example: "1302"
+        contactName:
+          allOf:
+            - $ref: "#/components/schemas/PersonName"
+        contactMethod:
+          $ref: "#/components/schemas/ContactMethodBase"
+    DetailedCorrespondence:
+      type: object
+      description: Proceeding Correspondence.
+      required:
+        - name
+        - address
+        - contactMethod
+      properties:
+        name:
+          type: string
+          description: Addressee name.
+          example: "SAN PEDRO"
+        address:
+          $ref: "#/components/schemas/HomeAddress"
+        contactMethod:
+          type: array
+          minLength: 1
+          items:
+            $ref: "#/components/schemas/ContactMethodBase"
+    HomeAddress:
+      type: object
+      description: Address data.
+      required:
+        - roadTypeCode
+        - addressName
+        - addressNum
+        - zipCode
+        - townDesc
+      allOf:
+        - type: object
+          properties:
+            roadTypeCode:
+              type: string
+              description: Indicates the code of the road type. Allowed values in '/common/roadTypes' resource of the API Catalogs.
+              example: "CL"
+            addressName:
+              type: string
+              description: Indicates the street address.
+              example: "SAN PEDRO"
+            addressNum:
+              type: string
+              description: Indicates the number of the street.
+              example: "34"
+            portalNum:
+              type: string
+              description: Portal number for an address.
+              example: "4"
+            stairNum:
+              type: string
+              description: Stair number for an address.
+              example: "2"
+            floorNum:
+              type: string
+              description: Flat floor for an address.
+              example: "4"
+            doorNum:
+              type: string
+              description: Number of the door for an address.
+              example: "15"
+            zipCode:
+              type: string
+              description: Indicates the zip code.
+              example: "05004"
+            townDesc:
+              type: string
+              description: Indicates the name of the town. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+              example: "AVILA"
+            provinceCode:
+              type: string
+              description: Province Identifier. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+              example: "05"
+            countryCode:
+              type: string
+              description: Country code. Allowed values in Country Catalog. Use '034' code for Spain.
+              example: "034"
+            postOfficeBox:
+              type: string
+              description: Indicates the post office box.
+              example: "3317"
+    ProceedingsSearch:
+      type: object
+      description: Proceedings search.
+      allOf:
+        - $ref: "#/components/schemas/ClaimsSearch"
+        - type: object
+          properties:
+            claimId:
+              type: string
+              description: Identifier code of claim.
+    ClaimsSearch:
+      type: object
+      description: Claims search.
+      properties:
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract.
+            to identify it.
+        effectiveFromDate:
+          type: string
+          format: date
+          description: Start date to perform the search.
+        effectiveToDate:
+          type: string
+          format: date
+          description: End date to perform the search.
+        insured:
+          $ref: "#/components/schemas/PersonBase"
+
+    Indemnity:
+      type: object
+      description: Object that encapsulates the basic information of an indemnity.
+      properties:
+        indemnityId:
+          type: string
+          description: Indemnity identificator.
+        indemnityDate:
+          type: string
+          format: date
+          description: Date of this operation.
+        indemnityAmn:
+          type: number
+          multipleOf: 0.01
+          description: Indemnity amount.
+        indemnityConcept:
+          type: string
+          description: Payment concept.
+        indemnityStateCode:
+          type: string
+          description: State code in which the compensation proposal is found.
+        indemnityStateDesc:
+          type: string
+          description: State in which the compensation proposal is found.
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        beneficiary:
+          $ref: "#/components/schemas/Beneficiary"
+    PaymentMethod:
+      type: object
+      description: Payment method basic info.
+      properties:
+        paymentMethodTypeCode:
+          type: string
+          description: Identifier of the type of payment method.
+        paymentMethodTypeDesc:
+          type: string
+          description: Payment method specification.
+        IBAN:
+          type: string
+          description: International bank account number.
+        checkNumber:
+          type: string
+          description: Check number.
+    Beneficiary:
+      type: object
+      description: Beneficiary data.
+      allOf:
+        - type: object
+          properties:
+            name:
+              type: string
+              description: Full name of beneficiary.
+            identityDocumentNumber:
+              type: string
+              description: Indicates the Identity document number.
+            address:
+              $ref: "#/components/schemas/AddressBase"
+    AddressBase:
+      type: object
+      description: Address base.
+      properties:
+        addressName:
+          type: string
+          description: Indicates the street address.
+        zipCode:
+          type: string
+          description: Indicates the zip code.
+        townDesc:
+          type: string
+          description: Indicates the name of the town. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+        provinceCode:
+          type: string
+          description: Province Identifier. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+        provinceDesc:
+          type: string
+          description: Indicates the province.
+        countryCode:
+          type: string
+          description: Country code. Use '034' code for Spain.
+        countryDesc:
+          type: string
+          description: Country desc.
+    Communications:
+      type: array
+      description: Communications list.
+      items:
+        allOf:
+          - $ref: "#/components/schemas/CommunicationBase"
+          - properties:
+              previewCommunication:
+                type: string
+                description: Preview communication text.
+                example: "Ref: Z40669621 Estimado cliente, le informamos del número de referencia con el que se ha registra"
+    CommunicationBase:
+      type: object
+      description: Communication basic information.
+      properties:
+        communicationId:
+          type: string
+          description: Communication identifier.
+          example: "3453"
+        communicationTypeCode:
+          type: string
+          description: Communication type code.
+          example: "01"
+        communicationTypeDesc:
+          type: string
+          description: Communication type description.
+          example: "MAIL"
+        modelCode:
+          type: string
+          description: Communication model code.
+          example: "A0"
+        modelDesc:
+          type: string
+          description: Communication model description.
+          example: "Mensaje automatico"
+        sendDate:
+          type: string
+          format: date-time
+          description: Date when this communication was sent.
+    Communication:
+      type: object
+      description: Communication detail.
+      allOf:
+        - $ref: "#/components/schemas/CommunicationBase"
+        - properties:
+            creationDate:
+              type: string
+              format: date-time
+              description: Date when this communication was created.
+            recipient:
+              type: string
+              description: Communication recipient.
+              example: "usuarioDESA@mapfre.com"
+            subject:
+              type: string
+              description: Communication subject.
+              example: "Ref. Z01986485"
+            languageCode:
+              type: string
+              description: Language code.
+              example: "CAS"
+            languageDesc:
+              type: string
+              description: Language description.
+              example: "CASTELLANO"
+            communicationText:
+              type: array
+              items:
+                type: string
+                example: "Estimado cliente ..."
+    CurrencyIsoCode:
+      type: string
+      description:
+        ISO currency code applicable to the quantia based on the ISO 4217
+        standard, for example USD, EUR, GBP, etc.
+    CreditCardInfo:
+      type: object
+      description: Information of a credit card type payment method.
+      properties:
+        creditCardHolder:
+          $ref: "#/components/schemas/PersonName"
+        cardNumber:
+          type: string
+          description: Credit card number.
+        expirationDate:
+          type: string
+          format: date-time
+          description: Card expiration date.
+        creditCardCvvCode:
+          type: string
+          description: Credit card CVV code.
+    BankAccountInfo:
+      type: object
+      description: Information for creating a bank account type payment method.
+      properties:
+        bankAccountId:
+          type: string
+          description: Sequential identifier of Bank account.
+        bankAccountTypeCode:
+          type: string
+          description: Bank account type.
+        IBAN:
+          type: string
+          description: International Bank Account number.
+        accountNumber:
+          type: string
+          description: Bank account number.
+        entityBank:
+          type: string
+          description: Entity to which the bank account belongs.
+        accountOwner:
+          type: string
+          description: Bank account owner.
+        entityBankDesc:
+          type: string
+          description: Descripcion Entity to which the bank account belongs.
+        officeBankCode:
+          type: string
+          description: Code office Bank.
+        officeBankDesc:
+          type: string
+          description: Descripcion office Bank.
+        bankAccountDigitalControl:
+          type: string
+          description: Bank account control digit.
+        bankAccountTypeDesc:
+          type: string
+          description: Descripcion of bank Account Type.
+        countryCode:
+          type: string
+          description: Country code.
+    PatrimonialProceeding:
+      type: object
+      description: Patrimonial proceeding.
+      allOf:
+        - $ref: "#/components/schemas/PatrimonialProceedingBase"
+        - type: object
+          properties:
+            warrantyCode:
+              type: string
+              description: Affected warranty code related to this Proceeding.
+            warrantyDesc:
+              type: string
+              description: Affected warranty description related to this Proceeding.
+            priorityCode:
+              type: string
+              description: "Proceeding priority Code. Allowed values: 0 - Urgente. 1 - Media. 2 - Normal."
+            priorityDesc:
+              type: string
+              description: "Proceeding priority Desc. Allowed values: 0 - Urgente. 1 - Media. 2 - Normal."
+            proceedingDesc:
+              type: string
+              description: Proceeding detailed description.
+            expertReport:
+              type: boolean
+              description: Flag indicating that exist an expert report.
+            legalProceeding:
+              type: boolean
+              description: Flag indicating the existence of legal proceeding.
+            proceedingOriginCode:
+              type: string
+              description: Proceeding origin code.
+            proceedingOriginDesc:
+              type: string
+              description: Proceeding origin desc.
+            entityCode:
+              type: string
+              description: Proceeding entity code.
+            entityDesc:
+              type: string
+              description: Proceeding entity desc.
+            correspondence:
+              $ref: "#/components/schemas/CorrespondenceBasic"
+            contactMethod:
+              type: array
+              items:
+                $ref: "#/components/schemas/PatrimonialContactMethod"
+            involvedPerson:
+              type: array
+              items:
+                $ref: "#/components/schemas/PersonDamageData"
+            agent:
+              $ref: "#/components/schemas/Agent"
+    CorrespondenceBasic:
+      type: object
+      description: Proceeding Correspondence.
+      properties:
+        name:
+          $ref: "#/components/schemas/PersonName/properties/name"
+        address:
+          $ref: "#/components/schemas/HomeAddressBase"
+    PersonName:
+      type: object
+      description: Indicates the intermediary name.
+      required:
+        - surname
+      properties:
+        name:
+          type: string
+          description: Person's first Name.
+          example: "MATIAS"
+        surname:
+          type: string
+          description: Person's last Name.
+          example: "IZQUIERDO SANCHEZ"
+    HomeAddressBase:
+      type: object
+      description: Address data.
+      properties:
+        addressName:
+          type: string
+          description: Indicates the street address.
+          example: "CL GOLES 1 A  EL TROBAL"
+        zipCode:
+          type: string
+          description: Indicates the zip code.
+          example: "45800"
+        townDesc:
+          type: string
+          description: Indicates the name of the town. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+          example: "Toledo"
+        provinceCode:
+          type: string
+          description: Province Identifier. Allowed values in '/common/territorialOrganization' resource of the API Catalogs.
+          example: "TO"
+        provinceDesc:
+          type: string
+          description: Indicates the province.
+          example: "Toledo"
+        countryCode:
+          type: string
+          description: Country code. Use '034' code for Spain.
+          example: "034"
+        countryDesc:
+          type: string
+          description: Country desc.
+          example: "España"
+    PatrimonialContactMethod:
+      type: object
+      description: >-
+        This resource gathers the contact methods preferred by the Person, such
+        as e-mail, telephone, etc. or the communication Channel through which
+        this Claim has been created.
+      allOf:
+        - $ref: "#/components/schemas/ContactMethodRelationship"
+        - properties:
+            contactPreferenceInd:
+              type: boolean
+              description: >-
+                Flag indicating if this contact media is the preferred by the client
+                or not.
+            contactDaytimeSlot:
+              type: string
+              description: >-
+                Time slot where the client allows to be reached through the contact
+                media.
+              example: "tarde 20:00"
+            contactActiveInd:
+              type: boolean
+              description: >-
+                Indicates if this contact is active.
+    ContactMethodRelationship:
+      type: object
+      description: Contact method relationship.
+      allOf:
+        - $ref: "#/components/schemas/Relationship"
+        - $ref: "#/components/schemas/ContactMethodBase"
+    ContactMethodBase:
+      type: object
+      description: Contact method base.
+      required:
+        - contactName
+        - contactMethodValue
+      properties:
+        contactMethodType:
+          type: string
+          description: >-
+            Contact method type. Allowed values: 'TRABAJO', 'OTROS', 'MOVIL', 'PARTICULAR', 'FIJO'.
+          example: "PARTICULAR"
+        contactMethodValue:
+          type: string
+          description: Indicates the value for the contact media according with the type.
+          example: "611688633"
+        contactName:
+          type: string
+          description: >-
+            Indicates the contact media name. Allowed values: 'TELEFONO', 'EMAIL'.
+          example: "TELEFONO"
+        contactObs:
+          type: string
+          description: >-
+            Indicates additional or complementary information for the contact
+            media record.
+          example: "OBSERVATIONS"
+    PersonDamageData:
+      type: object
+      description: Involved person info.
+      allOf:
+        - properties:
+            involvedTypeCode:
+              type: string
+              description: Involved person type.
+              example: "02"
+            involvedTypeDesc:
+              type: string
+              description: Involved person type description.
+              example: "ASEGURADO"
+        - $ref: "#/components/schemas/PersonBase"
+        - properties:
+            contactMethod:
+              type: array
+              items:
+                $ref: "#/components/schemas/ContactMethodBase"
+            address:
+              $ref: "#/components/schemas/HomeAddressBase"
+            additionalInfo:
+              type: object
+              properties:
+                company:
+                  type: string
+                  description: Harm person company name.
+                  example: "MAPFRE"
+                observations:
+                  type: string
+                  description: Free text observations.
+                  example: "MAPFRE ESPAÑA"
+    PersonBase:
+      type: object
+      description: Indicates the intermediary name.
+      properties:
+        contactName:
+          $ref: "#/components/schemas/PersonName"
+        identityDocumentNumber:
+          type: string
+          description: Indicates the Identity document number.
+          example: "06234999k"
+    ProceedingTasks:
+      type: array
+      description: Proceeding tasks list.
+      items:
+        $ref: "#/components/schemas/ProceedingTaskBase"
+    ProceedingTaskPhase:
+      type: object
+      description: Proceeding Task Phase info.
+      properties:
+        code:
+          type: number
+          description: Phase Code.
+          example: "2"
+        description:
+          type: string
+          description: Phase Description.
+          example: "GESTIÓN DEL SINIESTRO"
+        extendedDescription:
+          type: string
+          description: Phase Extended description.
+          example: "LA COMPAÑÍA ESTÁ ANALIZANDO EL SINIESTRO"
+    ProceedingTask:
+      type: object
+      description: Proceeding task list.
+      allOf:
+        - $ref: "#/components/schemas/ProceedingTaskBase"
+        - type: object
+          properties:
+            phase:
+              $ref: "#/components/schemas/ProceedingTaskPhase"
+            doneWorkDesc:
+              type: string
+              description: Done work description.
+              example: "Reparado"
+            pendingWorkDesc:
+              type: string
+              description: Pending work description.
+              example: "APLAZAMIENTO: RETRASADO POR CLIENTE"
+            events:
+              type: array
+              description: Proceeding task events.
+              items:
+                type: object
+                properties:
+                  eventCode:
+                    type: string
+                    description: Event code.
+                    example: "PA"
+                  eventDesc:
+                    type: string
+                    description: Text line.
+                    example: "PENDIENTE ASIGNACIÓN"
+                  eventDate:
+                    type: string
+                    description: Event date.
+                    format: date-time
+    ProceedingTaskBase:
+      type: object
+      description: Proceeding task base.
+      properties:
+        professionalData:
+          allOf:
+            - type: object
+              properties:
+                contactName:
+                  $ref: "#/components/schemas/PersonName"
+        taskId:
+          type: string
+          description: Identifier code of task.
+          example: "1011822070"
+        activityCode:
+          type: string
+          description: Code of the activity.
+          example: "01"
+        activityDesc:
+          type: string
+          description: Text of the activity.
+          example: "Fontaneria"
+        activityTitleClientDesc:
+          type: string
+          description: Title of the activity for client.
+          example: "Pendiente de cliente"
+        activityClientDesc:
+          type: string
+          description: Text of the activity for client.
+          example: "Necesaria información o gestión del usuario para continuar"
+        prevPostponementTaskId:
+          type: string
+          description: Identifier code of previous postponement task.
+          example: "122385710"
+        postponementTaskId:
+          type: string
+          description: Identifier code of postponement task.
+          example: "122385711"
+        deliverateDate:
+          type: string
+          format: date-time
+          description: Date when this task has given to the professional.
+        returnDate:
+          type: string
+          description: Date when this task has been returned by the professional.
+          format: date-time
+    Agent:
+      type: object
+      description: Proceeding Agent Data.
+      properties:
+        agentCode:
+          type: string
+          description: Agent code.
+          example: "45623"
+        name:
+          type: string
+          description: Agent name.
+          example: "Juan"
+        surname:
+          type: string
+          description: Agent surname.
+          example: "Gonzo Inam"
+        centre:
+          type: string
+          description: Agent centre.
+          example: "36"
+        centreDescription:
+          type: string
+          description: Agent centre description.
+          example: "Mapfre central"
+        telephoneNumber:
+          type: string
+          description: Telephone number.
+          example: "643888654"
+        email:
+          type: string
+          description: Email.
+          example: "gonzo@correo.es"
+        agentCentreEmail:
+          type: string
+          description: Processor centre.
+          example: "fade.canarias@mapfre.com"
+        workDescription:
+          description: Work done.
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: string
+                description: Text line.
+                example: "reparaciones"
+              order:
+                type: integer
+                description: Text line order.
+        descriptioWorkToDo:
+          type: array
+          description: Work to do.
+          items:
+            type: object
+            properties:
+              line:
+                type: string
+                description: Text line.
+                example: "descripciónes reparaciones"
+              order:
+                type: integer
+                description: Text line order.
+        events:
+          type: array
+          description: Event description.
+          items:
+            type: object
+            properties:
+              eventDesc:
+                type: string
+                description: Text line.
+                example: "Primer contacto"
+              eventDate:
+                type: string
+                format: date event
+                example: "2019-01-13 - Jueves - Tarde"
+    PatrimonialProceedingSearch:
+      type: object
+      description: Proceeding search record.
+      allOf:
+        - $ref: "#/components/schemas/PatrimonialProceedingBase"
+        - type: object
+          properties:
+            warranty:
+              type: string
+              description: Warranty that covers the claim.
+    ClaimCreate:
+      type: object
+      description: Claim create basic info.
+      properties:
+        claimId:
+          type: string
+          description: Identifier code of claim.
+        proceedingId:
+          type: string
+          description: Identifier code of proceeding.
+        documentFax:
+          type: string
+          description: Fax number to send documentation.
+        documentEmail:
+          type: string
+          description: Email to send documentation.
+    PatrimonialProceedingBase:
+      type: object
+      description: Proceeding basic info.
+      properties:
+        proceedingId:
+          type: string
+          description: Unique identifier of the file.
+        claimId:
+          type: string
+          description: Identifier code of claim.
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract
+            to identify it.
+        proceedingTypeCode:
+          type: string
+          description: >-
+            Code of the type of this proceeding.
+        proceedingTypeDesc:
+          type: string
+          description: >-
+            Description of the type of this proceeding.
+        proceedingClassCode:
+          type: string
+          description: >-
+            Code of the class of this proceeding.
+        proceedingClassDesc:
+          type: string
+          description: >-
+            Description of the class of this proceeding.
+        proceedingStatusCode:
+          type: string
+          description: Proceeding Status code.
+        proceedingStatusDesc:
+          type: string
+          description: Proceeding Status Desc.
+        effectiveDate:
+          type: string
+          format: date-time
+          description: Date when the claim actually occurs.
+        communicationDate:
+          type: string
+          description: Date when the claim is communicated.
+          format: date-time
+        settlementDate:
+          type: string
+          description: Date when the claim is settle.
+          format: date
+        paymentAmount:
+          type: number
+          description: Proceeding payment amount.
+          multipleOf: 0.01
+    ########################################
+    # Errors
+    Error:
+      required:
+        - application
+        - code
+        - component
+        - errors
+        - message
+        - timestamp
+        - type
+      type: object
+      description: Error data.
+      properties:
+        code:
+          type: string
+          description: Error code.
+          example: "403"
+        message:
+          type: string
+          description: Error description.
+          example: Internal error in the service
+        type:
+          type: string
+          description: Error type.
+          example: Null pointer
+        context:
+          type: string
+          description: Error context.
+          example: Process query action
+        exception:
+          type: string
+          description: Exception.
+          example: NullPointerException
+        component:
+          type: string
+          description: Error component.
+          example: ProcessImpl
+        application:
+          type: string
+          description: Error application.
+          example: Process_Backend
+        timestamp:
+          type: string
+          description: Error time.
+          format: date-time
+          example: 2019-01-13T18:27:41.511Z
+        errors:
+          type: array
+          description: Error list.
+          items:
+            $ref: "#/components/schemas/ErrorComponent"
+        stacktrace:
+          $ref: "#/components/schemas/StackTrace"
+    ErrorComponent:
+      required:
+        - code
+      type: object
+      description: Error component data.
+      properties:
+        code:
+          type: string
+          description: Error code.
+          example: "403"
+        message:
+          type: string
+          description: Error message.
+          example: Internal error
+        component:
+          type: string
+          description: Error component.
+          example: ProcessImpl
+        rootcase:
+          type: string
+          description: Error cause.
+          example: NullPointerException
+        info:
+          type: array
+          description: Error information.
+          items:
+            $ref: "#/components/schemas/ErrorInfo"
+    ErrorInfo:
+      type: object
+      description: Error info data.
+      properties:
+        key:
+          type: string
+          description: Key.
+          example: key
+        value:
+          type: string
+          description: Value.
+          example: value
+    StackTrace:
+      type: object
+      description: Error trace.
+      properties:
+        declaringClass:
+          type: string
+          description: Error java class.
+          example: com.mapfre.gaia.ProcessImpl
+        methodName:
+          type: string
+          description: Method name.
+          example: processAction
+        fileName:
+          type: string
+          description: File name.
+          example: ProccessImpl.java
+        lineNumber:
+          type: string
+          description: Error line number in the java class.
+          example: "123"
+    AssistanceCreateRequest:
+      type: object
+      description: Assistance create request.
+      properties:
+        policyId:
+          type: string
+          description: Numerical reference assigned to each insurance contract to identify it.
+          example: "0731080207571"
+        assistanceContract:
+          $ref: "#/components/schemas/AssistanceContract"
+        effectiveDate:
+          type: string
+          format: date-time
+          description: Date when the assistance actually occurs.
+          example: "2023-07-05T07:54:57.798Z"
+        ocurrenceAddress:
+          $ref: "#/components/schemas/OccurrenceAddress"
+        contactAssistance:
+          type: object
+          description: Contact Assistance.
+          required:
+            - relationshipCode
+          properties:
+            relationshipCode:
+              type: string
+              description: Caller relationship code.
+              example: "02"
+            callerContact:
+              $ref: "#/components/schemas/GeneralContactBase"
+        correspondence:
+          $ref: "#/components/schemas/DetailedCorrespondence"
+        report:
+          type: string
+          description: A reporting of what happened on this assistance.
+          example: "TESTIMONIAL PROOF"
+        assistanceJobs:
+          $ref: "#/components/schemas/AssistanceJobs"
+        agentCode:
+          type: string
+          description: Agent code.
+          example: "4125"
+        othersDesc:
+          type: string
+          description: Other type of description.
+          example: "Another description"
+    AssistanceCreateResponse:
+      type: object
+      description: Assistance create response basic info.
+      properties:
+        claimId:
+          type: string
+          description: Identifier code of claim.
+          example: "Z01988690"
+        proceedingId:
+          type: string
+          description: Unique identifier of the file.
+          example: "Z40646301"
+        documentFax:
+          type: string
+          description: Fax number to send documentation.
+          example: "912 456 956"
+        documentEmail:
+          type: string
+          description: Email to send documentation.
+          example: "juammizquierda@gmail.com"
+    AssistanceContract:
+      type: object
+      description: Assistance contract.
+      properties:
+        contractNumber:
+          type: string
+          description: Contract number.
+          example: "2862717"
+        assistanceRecipient:
+          $ref: "#/components/schemas/PatrimonialContactSingle"
+    AssistanceJobs:
+      type: array
+      description: Assistance jobs list.
+      items:
+        $ref: "#/components/schemas/AssistanceJob"
+    AssistanceJob:
+      type: object
+      description: Assistance job.
+      required:
+        - activityCode
+      properties:
+        assistanceJobZone:
+          type: string
+          description: Zone of the job assistance.
+          example: "56"
+        activityCode:
+          type: string
+          description: Code of the activity.
+          example: "01"
+        interventionDate:
+          type: string
+          format: date-time
+          description: Intervention date.
+          example: "2023-07-05T07:54:57.798Z"
+        shift:
+          type: string
+          description: Availability shift.
+          example: "T"
+    AssistanceJobsResponse:
+      type: array
+      description: Assistance jobs response list.
+      items:
+        $ref: "#/components/schemas/AssistanceJobData"
+    AssistanceJobData:
+      type: object
+      description: Assistance job data.
+      properties:
+        jobCode:
+          type: integer
+          format: int64
+          description: Code of the job.
+          example: "2743254235345"
+        jobDesc:
+          type: string
+          description: Description of the job.
+          example: "Arreglo de fontanería"
+        jobActivity:
+          $ref: "#/components/schemas/JobActivity"
+        freeBudgetInd:
+          type: boolean
+          description: Free Budget index from a job.
+        stockJobAvailabilityInd:
+          type: boolean
+          description: Stock availability index from a job.
+    JobActivity:
+      type: object
+      description: Job activity.
+      properties:
+        activityCode:
+          type: string
+          description: Activity Code.
+          example: "01"
+        activityDesc:
+          type: string
+          description: Activity Description.
+          example: "FONTANERIA"
+    CheckClaimsResponse:
+      type: array
+      description: Check claims response list.
+      items:
+        $ref: "#/components/schemas/CheckClaim"
+    CheckClaim:
+      type: object
+      description: Check claim data.
+      properties:
+        claimId:
+          type: string
+          description: Claim Id.
+          example: "Z40669620"
+        effectiveDate:
+          type: string
+          format: date-time
+          description: Date when the claim actually occurs.
+          example: "2021-04-07T07:46:00.000Z"
+        communicationDate:
+          type: string
+          description: Date when the claim is communicated.
+          format: date-time
+          example: "2021-04-07T07:46:00.000Z"
+    ClaimInterventionRequest:
+      type: object
+      description: Claim Intervention Request.
+      required:
+        - policyId
+        - claimTypeCode
+        - effectiveDate
+        - policyEffectiveDate
+      properties:
+        policyId:
+          type: string
+          description: Numerical reference assigned to each insurance contract to identify it.
+          example: "0731080207571"
+        claimTypeCode:
+          type: string
+          enum: ["BH", "RE"]
+          description: Indicates the allowed value for this type of Claim.
+          example: "BH"
+        riskModalityCode:
+          type: string
+          description: Code of risk modality.
+          example: "BOO"
+        effectiveDate:
+          type: string
+          format: date
+          description: Date when the claim actually occurs.
+          example: "2021-04-07"
+        policyEffectiveDate:
+          type: string
+          format: date
+          description: Date when the policy actually occurs.
+          example: "2022-03-07"
+    ClaimInterventionResponse:
+      type: object
+      description: Claim Intervention Response.
+      properties:
+        availableInterventions:
+          type: integer
+          description: Number of available Interventions.
+          example: 2
+        providedInterventions:
+          type: integer
+          description: Number of provided Interventions.
+          example: 0
+    PatrimonialAssistanceSearchRequest:
+      type: object
+      description: Assistance search filter.
+      properties:
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract
+            to identify it.
+          example: "0731080207571"
+        effectiveFromDate:
+          type: string
+          format: date
+          description: Start date to perform the search.
+        effectiveToDate:
+          type: string
+          format: date
+          description: End date to perform the search.
+        insured:
+          $ref: "#/components/schemas/PatrimonialAssistancePersonBase"
+    PatrimonialAssistancePersonBase:
+      type: object
+      description: Indicates the intermediary name.
+      properties:
+        contractNumber:
+          type: string
+          description: Contract number.
+          example: "000002862717"
+        contactName:
+          $ref: "#/components/schemas/PersonName"
+        identityDocumentNumber:
+          type: string
+          description: Indicates the Identity document number.
+          example: "28627173P"
+    PatrimonialAssistanceBase:
+      type: object
+      description: Patrimonial assistance base.
+      properties:
+        assistanceId:
+          type: string
+          description: Identifier code of assistance.
+          example: "Z40646300"
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract
+            to identify it.
+          example: "0731080207571"
+        assistanceCauseCode:
+          type: string
+          description: Cause code of assistance.
+          example: "02"
+        assistanceCauseDesc:
+          type: string
+          description: Cause description of assistance.
+          example: "CRISTALES"
+        assistanceDesc:
+          type: string
+          description: A reporting of what happened on this assistance.
+          example: "Reparar ventana."
+        assistanceStatusCode:
+          type: string
+          description: >-
+            Code of the status. Allowed values: P - Pendiente. T - Terminado. L
+            - Liquidado.
+          example: "P"
+        assistanceStatusDesc:
+          type: string
+          description: >-
+            Description of the status.Allowed values: P - Pendiente, T -
+            Terminado, L - Liquidado.
+          example: "Pendiente"
+        effectiveDate:
+          type: string
+          description: Date when the assistance actually occurs.
+          format: date-time
+        communicationDate:
+          type: string
+          description: Date when the assistance is communicated.
+          format: date-time
+        settlementDate:
+          type: string
+          description: Date when the assistance is settle.
+          format: date-time
+        paymentAmount:
+          type: number
+          description: Assistance amount.
+          multipleOf: 0.01
+        proceedingCounter:
+          type: integer
+          description: Quantity of proceedings associated to his assistance.
+    PatrimonialAssistancesProceedingsSearchRequest:
+      type: object
+      description: Assistance proceedings search filter.
+      allOf:
+        - $ref: "#/components/schemas/PatrimonialAssistanceProceedingsSearch"
+        - type: object
+          properties:
+            assistanceId:
+              type: string
+              description: Identifier code of assistance.
+              example: "Z40646300"
+    PatrimonialAssistanceProceedingsSearch:
+      type: object
+      description: Assistances proceedings search filter.
+      properties:
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract
+            to identify it.
+          example: '0731080207571'
+        effectiveFromDate:
+          type: string
+          format: date
+          description: Start date to perform the search.
+        effectiveToDate:
+          type: string
+          format: date
+          description: End date to perform the search.
+        insured:
+          $ref: '#/components/schemas/PatrimonialAssistancePersonBase'
+    PatrimonialAssistanceProceedingSearch:
+      type: object
+      description: Assistance proceeding search record.
+      allOf:
+        - $ref: "#/components/schemas/PatrimonialAssistanceProceedingBase"
+        - type: object
+          properties:
+            warranty:
+              type: string
+              description: Warranty that covers the assistance.
+              example: "AGUA CONTENIDO"
+    PatrimonialAssistanceProceedingBase:
+      type: object
+      description: Assistance proceeding basic info.
+      properties:
+        proceedingId:
+          type: string
+          description: Unique identifier of the file.
+          example: "Z40646301"
+        assistanceId:
+          type: string
+          description: Identifier code of assistance.
+          example: "Z40646300"
+        policyId:
+          type: string
+          description: >-
+            Numerical reference assigned to each insurance contract
+            to identify it.
+          example: "0731080207571"
+        proceedingTypeCode:
+          type: string
+          description: >-
+            Code of the type of this proceeding.
+          example: "99"
+        proceedingTypeDesc:
+          type: string
+          description: >-
+            Description of the type of this proceeding.
+          example: "OTROS"
+        proceedingClassCode:
+          type: string
+          description: >-
+            Code of the class of this proceeding.
+          example: "CFA"
+        proceedingClassDesc:
+          type: string
+          description: >-
+            Description of the class of this proceeding.
+          example: "AGUA"
+        proceedingStatusCode:
+          type: string
+          description: Proceeding Status code.
+          example: "P"
+        proceedingStatusDesc:
+          type: string
+          description: Proceeding Status Desc.
+          example: "PENDIENTE"
+        effectiveDate:
+          type: string
+          format: date-time
+          description: Date when the assistance actually occurs.
+        communicationDate:
+          type: string
+          description: Date when the assistance is communicated.
+          format: date-time
+        settlementDate:
+          type: string
+          description: Date when the assistance is settle.
+          format: date
+        paymentAmount:
+          type: number
+          description: Assistance proceeding payment amount.
+          multipleOf: 0.01
+    PatrimonialAssistance:
+      type: object
+      description: Patrimonial assistance.
+      allOf:
+        - $ref: "#/components/schemas/PatrimonialAssistanceBase"
+        - type: object
+          properties:
+            assistanceCaller:
+              allOf:
+                - $ref: "#/components/schemas/Relationship"
+                - $ref: "#/components/schemas/PatrimonialContactBase"
+            assisOcurrenceAddress:
+              $ref: "#/components/schemas/HomeAddressBase"
+    PatrimonialAssistanceProceeding:
+      type: object
+      description: Patrimonial assistance proceeding.
+      allOf:
+        - $ref: "#/components/schemas/PatrimonialAssistanceProceedingBase"
+        - type: object
+          properties:
+            warrantyCode:
+              type: string
+              description: Affected warranty code related to this Proceeding.
+              example: "02"
+            warrantyDesc:
+              type: string
+              description: Affected warranty description related to this Proceeding.
+              example: "AGUA CONTENIDO"
+            priorityCode:
+              type: string
+              description: "Proceeding priority Code. Allowed values: 0 - Urgente. 1 - Media. 2 - Normal."
+              example: "0"
+            priorityDesc:
+              type: string
+              description: "Proceeding priority Desc. Allowed values: 0 - Urgente. 1 - Media. 2 - Normal."
+              example: "Urgente"
+            proceedingDesc:
+              type: string
+              description: Proceeding detailed description.
+              example: "DATOS CONTACTO : TLF_1 : 678588762 "
+            expertReport:
+              type: boolean
+              description: Flag indicating that exist an expert report.
+            legalProceeding:
+              type: boolean
+              description: Flag indicating the existence of legal proceeding.
+            proceedingOriginCode:
+              type: string
+              description: Proceeding origin code.
+              example: "1"
+            proceedingOriginDesc:
+              type: string
+              description: Proceeding origin desc.
+              example: "TELEFONO"
+            entityCode:
+              type: string
+              description: Proceeding entity code.
+              example: "41"
+            entityDesc:
+              type: string
+              description: Proceeding entity desc.
+              example: "MAPFRE ESPAÑA, S.A."
+            correspondence:
+              $ref: "#/components/schemas/CorrespondenceBasic"
+            contactMethod:
+              type: array
+              items:
+                $ref: "#/components/schemas/PatrimonialContactMethod"
+            involvedPerson:
+              type: array
+              items:
+                $ref: "#/components/schemas/PersonDamageData"
+            agent:
+              $ref: "#/components/schemas/Agent"
+    ClientClaimResponse:
+      type: object
+      description: Client claim data.
+      properties:
+        clientName:
+          type: string
+          description: Client name.
+          example: 'Juan Lore Finch'
+        clientOcurrenceAddresses:
+          type: array
+          description: Client ocurrence addresses.
+          items:
+            $ref: '#/components/schemas/ClientAddress'
+        contactMethod:
+          type: array
+          description: Client contact methods.
+          minLength: 1
+          items:
+            $ref: '#/components/schemas/ContactMethodBase'
+        clientCorrespondence:
+          $ref: '#/components/schemas/HomeAddress'
+        clientPolicyData:
+          $ref: '#/components/schemas/ClientPolicyData'
+    ClientAssistanceResponse:
+      type: object
+      description: Client assistance data.
+      properties:
+        clientName:
+          type: string
+          description: Client name.
+          example: 'Juan Lore Finch'
+        clientOcurrenceAddresses:
+          type: array
+          description: Client ocurrence addresses.
+          items:
+            $ref: '#/components/schemas/ClientAddress'
+        contactMethod:
+          type: array
+          description: Client contact methods.
+          minLength: 1
+          items:
+            $ref: '#/components/schemas/ContactMethodBase'
+        clientCorrespondence:
+          $ref: '#/components/schemas/HomeAddress'
+        clientPolicyData:
+          $ref: '#/components/schemas/ClientPolicyData'
+    ClientAddress:
+      type: object
+      description: Client address.
+      properties:
+        mainAddressInd:
+          type: boolean
+          description: Indicates the main address.
+        address:
+          $ref: '#/components/schemas/HomeAddress'
+    ClientPolicyData:
+      type: object
+      description: Policy information of the client.
+      properties:
+        policyClass:
+          $ref: '#/components/schemas/PolicyClass'
+        coverageWarranties:
+          type: array
+          description: Coverage warranties information.
+          items:
+            $ref: '#/components/schemas/CoverageWarranties'
+        originCode:
+          type: string
+          description: Code of origin of the data at source.
+          example: '3'
+        originDesc:
+          type: string
+          description: Description of origin of the data at source.
+          example: 'MAPFRE'
+        riskModality:
+          $ref: '#/components/schemas/RiskModality'
+        segregatedInd:
+          type: boolean
+          description: Indicates if the policy is segregated.
+        policyEffectiveDate:
+          type: string
+          format: date
+          description: Date when the policy actually occurs.
+          example: "2022-03-07"
+    PolicyClass:
+      type: object
+      description: Information relating to the class of policy.
+      properties:
+        classId:
+          type: string
+          description: Identificator of the class of the policy.
+          example: '073'
+        policyWarranties:
+          $ref: '#/components/schemas/PolicyWarranty'
+        clauses:
+          type: array
+          description: Policy clauses.
+          items:
+            $ref: '#/components/schemas/Clause'
+    PolicyWarranty:
+      type: object
+      description: Insurance warranties of the policy.
+      properties:
+        additionalInd:
+          type: boolean
+          description: Indicates if the policy has additional warranty.
+        extendedWaterInd:
+          type: boolean
+          description: Indicates if the policy has extended water warranty.
+        extendedGlassInd:
+          type: boolean
+          description: Indicates if the policy has extended glass warranty.
+    Clause:
+      type: object
+      description: Policy clause.
+      properties:
+        numClause:
+          type: string
+          description: Clause number.
+          example: '5'
+        clauseInd:
+          type: boolean
+          description: Clause indicator.
+    CoverageWarranties:
+      type: object
+      description: Coverage warranties.
+      properties:
+        coverageWarrantyCode:
+          type: string
+          description: Coverage-warranty code.
+          example: '018262'
+        coverageWarrantyDesc:
+          type: string
+          description: Coverage-warranty description.
+          example: 'Contenido mobiliario'
+        capitalAmount:
+          type: number
+          description: Amount available in the policy for a certain risk.
+          format: double
+          example: '124.54'
+        percentageRisk:
+          type: number
+          description: >- 
+            Percentage of the capital amount with which the amount of the franchise is calculated.
+          format: double
+          example: '7.05'
+        franchiseType:
+          type: integer
+          description: Franquise type.
+          format: int32
+          example: '100'
+        franchiseDesc:
+          type: string
+          description: Franquise description.
+          example: 'Absoluta de 100 euros.'
+    RiskModality:
+      type: object
+      description: Risk modality information. Defines the categorization, clauses, coverage and warranties of the client.
+      properties:
+        riskModalityCode:
+          type: string
+          description: Code of the risk modality.
+          example: "C00"
+        riskModalityDesc:
+          type: string
+          description: Description of the risk modality.
+          example: "Cliente platino"
+        guidedData:
+          type: array
+          description: Guided data list. Indicates the factors that condition the information to be processed and the information shown.
+          items:
+            $ref: '#/components/schemas/GuidedData'
+    GuidedData:
+      type: object
+      description: Guided Data. The specific data are related depending on the modality data.
+      properties:
+        modalityCode:
+          type: string
+          description: Code of the modality.
+          example: '1'
+        modalityDesc:
+          type: string
+          description: Description of the modality.
+          example: 'Riesgo'
+        specificCode:
+          type: string
+          description: Specific code.
+          example: '32'
+        specificDesc:
+          type: string
+          description: Specific description.
+          example: 'Continente'
+  responses:
+    ClientClaimResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClientClaimResponse'
+    ClientAssistanceResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClientAssistanceResponse'
+    CreateClaimResponse:
+      description: Created.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ClaimCreate"
+    CheckClaimsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CheckClaimsResponse"
+    ClaimInterventionResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ClaimInterventionResponse"
+    SearchProceedingResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/PatrimonialProceedingSearch"
+    SearchClaimsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ClaimBase"
+    ClaimResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Claim"
+    IndemnityResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Indemnity"
+    CommunicationsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Communications"
+    ComunicationResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Communication"
+    ProceedingResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PatrimonialProceeding"
+    TasksResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProceedingTasks"
+    TaskResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProceedingTask"
+
+    GetDocumentResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DocumentBasic"
+    ProceedingTaskDocumentsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/Document"
+    CreateDocumentResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              documentId:
+                $ref: "#/components/schemas/Document/properties/documentId"
+    ProceedingDocumentsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/Document"
+    AssistanceJobsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AssistanceJobsResponse"
+    AssistanceCreateResponse:
+      description: Created.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AssistanceCreateResponse"
+    SearchAssisResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/PatrimonialAssistanceBase"
+    AssistanceDetailResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PatrimonialAssistance"
+    SearchAssisProcedResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/PatrimonialAssistanceProceedingSearch"
+    AssisProceedingResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PatrimonialAssistanceProceeding"
+    AssistanceTasksResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProceedingTasks"
+    AssistanceTaskResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProceedingTask"
+    AssistanceComsResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Communications"
+    AssistanceComResponse:
+      description: Successful response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Communication"
+    InternalServerErrorResponse:
+      description: Unexpected Error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            internalErrorExample:
+              $ref: "#/components/examples/InternalErrorExample"
+    BadRequestResponse:
+      description: Bad Request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            badRequestExample:
+              $ref: "#/components/examples/BadRequestExample"
+    NotFoundResponse:
+      description: Not Found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            notFoundExample:
+              $ref: "#/components/examples/NotFoundExample"
+    UnauthorizedResponse:
+      description: Unauthorized.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unauthorizedExample:
+              $ref: "#/components/examples/UnauthorizedExample"
+    ForbiddenResponse:
+      description: Forbidden.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            forbiddenExample:
+              $ref: "#/components/examples/ForbiddenExample"
+    EmptyResponse:
+      description: OK.
+  examples:
+    InternalErrorExample:
+      value:
+        code: 500
+        message: Unexpected error
+        type: Unexpected error
+        application: application
+        timestamp: "2019-01-13T18:27:41.511Z"
+        errors:
+          - code: 99
+            message: Internal server error
+    BadRequestExample:
+      value:
+        code: 400
+        message: Request is not properly formatted
+        type: Bad Request
+        application: application
+        timestamp: "2019-01-13T18:27:41.511Z"
+        errors:
+          - code: 98
+            message: "Wrong parameter format: pickupOfficeCode"
+    NotFoundExample:
+      value:
+        code: 404
+        message: Resource not found
+        type: Not Found
+        application: application
+        timestamp: "2019-01-13T18:27:41.511Z"
+        errors:
+          - code: 100
+            message: Could not find the requested resource
+    UnauthorizedExample:
+      value:
+        code: 401
+        message: Unauthorized
+        type: Unauthorized
+        application: application
+        timestamp: "2019-01-13T18:27:41.511Z"
+        errors:
+          - code: 101
+            message: Missing or wrong authentication method
+    ForbiddenExample:
+      value:
+        code: 403
+        message: Resource forbidden
+        type: Resource forbidden
+        application: application
+        timestamp: "2019-01-13T18:27:41.511Z"
+        errors:
+          - code: 102
+            message: User has not been granted to access this resource
+  parameters:
+    AssistanceId:
+      name: assistanceId
+      in: path
+      description: Assistance Identifier.
+      required: true
+      schema:
+        type: string
+      example: "Z25346880"
+    AcceptLanguageHeader:
+      name: Accept-Language
+      in: header
+      description: Accepted languages.
+      required: true
+      schema:
+        type: string
+        enum:
+          - es-ES
+        default: es-ES
+    ClaimId:
+      name: claimId
+      in: path
+      description: Unique ID of the claim.
+      required: true
+      schema:
+        type: string
+      example: "Z40661360"
+    nuuma:
+      name: NUUMA
+      in: query
+      description: Unique ID of a Mapfre worker.
+      schema:
+        type: string
+      example: "LATASIN"
+    ProceedingId:
+      name: proceedingId
+      in: path
+      description: Unique ID of the proceeding.
+      required: true
+      schema:
+        type: string
+      example: "Z40632071"
+    PolicyId:
+      name: policyId
+      in: query
+      description: Numerical reference assigned to each insurance contract to identify it.
+      required: true
+      schema:
+        type: string
+      example: "0731487003410"
+    EffectiveDate:
+      name: effectiveDate
+      in: query
+      description: Date when the claim or assistance actually occurs.
+      required: true
+      schema:
+        type: string
+        format: date
+      example: "2023-06-01"
+    CommunicationId:
+      name: communicationId
+      in: path
+      description: Identifier of the communication.
+      required: true
+      schema:
+        type: string
+      example: "56443778"
+    TaskId:
+      name: taskId
+      in: path
+      description: Unique ID of the task.
+      required: true
+      schema:
+        type: string
+      example: "67878"
+    CommunicationTypeCode:
+      name: communicationTypeCode
+      in: query
+      description: >-
+        Communication type code. Allowed values are: '01' - MAIL, '02' - SMS, 'XX' - LETTER.
+      required: true
+      schema:
+        type: string
+      example: "01"
+    DocumentId:
+      name: documentId
+      in: path
+      description: Unique ID of the document.
+      required: true
+      schema:
+        type: string
+      example: "090003e9800b906c"
+    X-Request-applicationId:
+      name: X-Request-applicationId
+      in: header
+      description: Identifier of application.
+      required: true
+      schema:
+        type: string
+      example: "TEST-APP"
+    X-Request-processId:
+      name: X-Request-processId
+      in: header
+      description: Unique identifier of the call, for tracking in logs. Generate random id.
+      required: false
+      schema:
+        type: string
+      example: "5b3e7b79-3ac9-4324-b2f6-516b09d04facg"
+    ZipCode:
+      name: zipCode
+      in: query
+      description: Zip Code.
+      required: true
+      schema:
+        type: string
+      example: "28098"
+    ClaimTypeCode:
+      name: claimTypeCode
+      in: query
+      description: Claim Type Code.
+      required: true
+      schema:
+        type: string
+      example: "C"
+  securitySchemes:
+    mapfre_auth:
+      type: oauth2
+      description: This API uses OAuth2.0 with Resource Owner Password credentials flow (a.k.a. password).
+      flows:
+        password:
+          tokenUrl: https://apisb.mapfre.com/auth/oauth/v2/token
+          scopes:
+            esp:home/claim:create: Grants access to create a claim.
+            esp:home/claim:read: Grants access to search for existing claims.
+            esp:home/claim:update: Grants access to edit existing claims.
+            esp:home/assistance:create: Grants access to create a assistance.
+            esp:home/assistance:read: Grants access to search for existing assistances.
