@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 
 # Paths to folders and files
@@ -16,15 +17,15 @@ def main():
     for folder in [java_folder, examples_folder]:
         if os.path.exists(folder):
             print(f"🗑️ Deleting folder: {folder}")
-            subprocess.run(["rm", "-rf", folder])
+            shutil.rmtree(folder)
 
     # Generate examples
     print("🚀 Generating examples...")
-    subprocess.run(["python3", "generate_json_examples.py"], check=True)
+    subprocess.run(["python", "generate_json_examples.py"], check=True)
 
     # Generate Java classes
     print("🚀 Generating Java classes...")
-    subprocess.run(["python3", "generate_java_classes.py"], check=True)
+    subprocess.run(["python", "generate_java_classes.py"], check=True)
 
     print("✅ Process complete!")
 

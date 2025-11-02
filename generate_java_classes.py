@@ -4,42 +4,30 @@ import json
 import re
 import yaml
 
-
-# Global dictionary to track all classes and their fields for inheritance detection
 all_classes_fields = {}
-# Global dictionary to track inheritance from OpenAPI allOf patterns
 inheritance_map = {}
-# Global dictionary to track oneOf fields that should use generics: {ClassName: {fieldName: [Type1, Type2, ...]}}
 oneof_fields_map = {}
 
 
 def to_java_class_name(name):
-    """Convert a name to Java class name (PascalCase) - preserve existing casing."""
-    # Remove file extension if present
     if name.endswith('.json'):
         name = name[:-5]
 
-    # If the name already looks like PascalCase (starts with uppercase, no spaces/special chars)
     if re.match(r'^[A-Z][a-zA-Z0-9]*$', name):
         return name
 
-    # If it's camelCase (starts with lowercase), just capitalize the first letter
     if re.match(r'^[a-z][a-zA-Z0-9]*$', name):
         return name[0].upper() + name[1:]
 
-    # Otherwise, convert to PascalCase by splitting and capitalizing
     name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     parts = re.split(r'[_\s-]+', name)
     return ''.join(word.capitalize() for word in parts if word)
 
 
 def to_java_field_name(name):
-    """Convert a name to Java field name (camelCase) - preserve existing camelCase."""
-    # If the name already looks like camelCase, keep it
     if re.match(r'^[a-z][a-zA-Z0-9]*$', name):
         return name
 
-    # Remove special characters but preserve word boundaries
     name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     parts = re.split(r'[_\s-]+', name)
     if not parts:
@@ -48,35 +36,18 @@ def to_java_field_name(name):
 
 
 def detect_base_class(class_name, fields):
-    """
-    Detect if this class should extend a base class.
-    Only uses inheritance_map from OpenAPI allOf patterns.
-    No naming conventions - purely based on OpenAPI structure.
-    """
-
-    # Check if we have inheritance info from OpenAPI schema
     if class_name in inheritance_map:
         base_class = inheritance_map[class_name]
         if base_class and base_class != class_name:
             return base_class
-
-    # No fallback - only use explicit allOf relationships from OpenAPI
     return None
 
 
 def load_openapi_inheritance(openapi_file='openapi.yaml'):
-    """
-    Load OpenAPI schema and extract inheritance relationships from allOf patterns.
-    Populates the inheritance_map global dictionary.
-    Detects inheritance when:
-    - Schema uses allOf
-    - First element of allOf is a $ref to another schema
-    No naming conventions required - purely based on OpenAPI structure.
-    """
     global inheritance_map
 
     try:
-        with open(openapi_file, 'r') as f:
+        with open(openapi_file, 'r', encoding='utf-8') as f:
             openapi_spec = yaml.safe_load(f)
 
         schemas = openapi_spec.get('components', {}).get('schemas', {})
@@ -84,22 +55,17 @@ def load_openapi_inheritance(openapi_file='openapi.yaml'):
         for schema_name, schema_def in schemas.items():
             class_name = to_java_class_name(schema_name)
 
-            # Check if schema uses allOf
             if isinstance(schema_def, dict) and 'allOf' in schema_def:
                 allof_list = schema_def['allOf']
 
-                # Only consider the FIRST element of allOf for inheritance
                 if allof_list and len(allof_list) > 0:
                     first_element = allof_list[0]
 
                     if isinstance(first_element, dict) and '$ref' in first_element:
                         ref_path = first_element['$ref']
-                        # Extract the schema name from the reference
                         if ref_path.startswith('#/components/schemas/'):
                             base_schema_name = ref_path.split('/')[-1]
                             base_class_name = to_java_class_name(base_schema_name)
-
-                            # No naming restrictions - any $ref in allOf creates inheritance
                             inheritance_map[class_name] = base_class_name
                             print(f"  📋 Detected: {class_name} extends {base_class_name} (from OpenAPI)")
 
@@ -112,25 +78,10 @@ def load_openapi_inheritance(openapi_file='openapi.yaml'):
 
 
 def load_openapi_oneof_fields(openapi_file='openapi.yaml'):
-    """
-    Load OpenAPI schema and extract oneOf field definitions.
-    Populates the oneof_fields_map global dictionary.
-    For fields using oneOf, we'll generate a base class and use generics in Java.
-
-    oneof_fields_map structure:
-    {
-        'ClassName': {
-            'fieldName': {
-                'types': [Type1, Type2, ...],
-                'baseClass': 'BaseClassName'
-            }
-        }
-    }
-    """
     global oneof_fields_map, inheritance_map
 
     try:
-        with open(openapi_file, 'r') as f:
+        with open(openapi_file, 'r', encoding='utf-8') as f:
             openapi_spec = yaml.safe_load(f)
 
         schemas = openapi_spec.get('components', {}).get('schemas', {})
@@ -578,7 +529,7 @@ def generate_nested_class_file(class_name, json_data, package, output_dir):
 
     # Write to file
     output_file = os.path.join(output_dir, f"{class_name}.java")
-    with open(output_file, 'w') as f:
+    with open(output_file, 'w', encoding='utf-8') as f:
         f.write(java_code)
 
     # Generate files for deeply nested classes
@@ -635,7 +586,7 @@ def convert_json_to_java(examples_dir, output_dir):
 
         # Skip empty or invalid JSON files
         try:
-            with open(json_path, 'r') as f:
+            with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 if not data:
                     print(f"⚠️  Skipping {json_file} (empty)")
@@ -785,10 +736,10 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
     print("Pass 1: Analyzing class structures for inheritance...\n")
 
     # Load inheritance relationships from OpenAPI schema
-    load_openapi_inheritance('../openapi.yaml')
+    load_openapi_inheritance('openapi.yaml')
 
     # Load oneOf fields from OpenAPI schema
-    load_openapi_oneof_fields('../openapi.yaml')
+    load_openapi_oneof_fields('openapi.yaml')
 
     # First pass: collect all class structures
     class_data = {}
@@ -804,7 +755,7 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
         seen_classes.add(class_name)
 
         try:
-            with open(json_path, 'r') as f:
+            with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
@@ -831,7 +782,7 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
                 # Generate empty base class
                 java_code = generate_base_class_for_oneof(base_class_name, package)
                 output_file = os.path.join(output_dir, f"{base_class_name}.java")
-                with open(output_file, 'w') as f:
+                with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(java_code)
                 print(f"✅ Generated base class {base_class_name}.java")
                 base_classes_generated.add(base_class_name)
@@ -856,7 +807,7 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
 
             if java_code:
                 output_file = os.path.join(output_dir, f"{class_name}.java")
-                with open(output_file, 'w') as f:
+                with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(java_code)
                 print(f"✅ Generated {class_name}.java")
                 generated += 1
@@ -885,7 +836,7 @@ def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
 
                 if java_code:
                     output_file = os.path.join(output_dir, f"{class_name}.java")
-                    with open(output_file, 'w') as f:
+                    with open(output_file, 'w', encoding='utf-8') as f:
                         f.write(java_code)
                     print(f"🔄 Regenerated {class_name}.java (extends {base_class})")
                     regenerated += 1
@@ -909,7 +860,7 @@ def organize_classes_by_domain(output_dir, base_package):
 
     # Load OpenAPI to get endpoints
     try:
-        with open('../openapi.yaml', 'r') as f:
+        with open('openapi.yaml', 'r', encoding='utf-8') as f:
             openapi_spec = yaml.safe_load(f)
     except:
         print("  ⚠️  Could not load openapi.yaml")
@@ -923,7 +874,7 @@ def organize_classes_by_domain(output_dir, base_package):
             continue
 
         filepath = os.path.join(output_dir, filename)
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
 
         # Extract class name
@@ -1050,7 +1001,7 @@ def organize_classes_by_domain(output_dir, base_package):
     for filename in os.listdir(output_dir):
         if filename.endswith('.java'):
             src = os.path.join(output_dir, filename)
-            with open(src, 'r') as f:
+            with open(src, 'r', encoding='utf-8') as f:
                 temp_files[filename] = f.read()
 
     # Also check subdirectories
@@ -1058,7 +1009,7 @@ def organize_classes_by_domain(output_dir, base_package):
         for filename in files:
             if filename.endswith('.java'):
                 filepath = os.path.join(root, filename)
-                with open(filepath, 'r') as f:
+                with open(filepath, 'r', encoding='utf-8') as f:
                     temp_files[filename] = f.read()
 
     # Clear output directory
@@ -1092,14 +1043,14 @@ def organize_classes_by_domain(output_dir, base_package):
             if base in class_info:
                 base_file = class_info[base]['file']
                 if base_file in temp_files:
-                    with open(os.path.join(subdir, base_file), 'w') as f:
+                    with open(os.path.join(subdir, base_file), 'w', encoding='utf-8') as f:
                         f.write(temp_files[base_file])
                     written.add(base)
             # Write children
             for child in sorted(children):
                 child_file = class_info[child]['file']
                 if child_file in temp_files:
-                    with open(os.path.join(subdir, child_file), 'w') as f:
+                    with open(os.path.join(subdir, child_file), 'w', encoding='utf-8') as f:
                         f.write(temp_files[child_file])
                     written.add(child)
 
@@ -1109,7 +1060,7 @@ def organize_classes_by_domain(output_dir, base_package):
                 continue
             file = class_info[cls]['file']
             if file in temp_files:
-                with open(os.path.join(related_dir, file), 'w') as f:
+                with open(os.path.join(related_dir, file), 'w', encoding='utf-8') as f:
                     f.write(temp_files[file])
                 written.add(cls)
 
@@ -1134,7 +1085,7 @@ def organize_classes_by_domain(output_dir, base_package):
             main_file = class_info[main_class]['file']
             if main_file in temp_files:
                 dest = os.path.join(body_dir, main_file)
-                with open(dest, 'w') as f:
+                with open(dest, 'w', encoding='utf-8') as f:
                     f.write(temp_files[main_file])
                 total_files += 1
             else:
@@ -1160,7 +1111,7 @@ def organize_classes_by_domain(output_dir, base_package):
             main_file = class_info[response_class]['file']
             if main_file in temp_files:
                 dest = os.path.join(str(response_dir), main_file)
-                with open(dest, 'w') as f:
+                with open(dest, 'w', encoding='utf-8') as f:
                     f.write(temp_files[main_file])
                 total_files += 1
 
@@ -1205,7 +1156,7 @@ def fix_imports_after_organization(output_dir, base_package, class_info):
 
             filepath = os.path.join(root, filename)
 
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
 
             # Get current package
@@ -1274,64 +1225,13 @@ def fix_imports_after_organization(output_dir, base_package, class_info):
             new_lines.extend(lines[first_code_idx:])
 
             # Write back
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(new_lines))
 
             fixed_count += 1
 
     print(f"✅ Fixed imports in {fixed_count} files\n")
 
-
-def organize_classes_by_endpoint_and_inheritance(output_dir):
-    """
-    Organize generated classes into folders based on endpoints and inheritance.
-    - Create folders for each endpoint (e.g., POST_claims).
-    - Separate into `body` and `response`.
-    - Within `related`, organize by inheritance.
-    """
-    for class_name, fields in all_classes_fields.items():
-        # Determine endpoint and type (body/response) from OpenAPI schema
-        endpoint = detect_endpoint_from_class(class_name)
-        class_type = detect_class_type(class_name)  # 'body' or 'response'
-
-        # Create base folder structure
-        endpoint_folder = os.path.join(output_dir, endpoint)
-        type_folder = os.path.join(endpoint_folder, class_type)
-        related_folder = os.path.join(type_folder, 'related')
-
-        os.makedirs(related_folder, exist_ok=True)
-
-        # Place the class in the appropriate folder
-        class_file = f"{class_name}.java"
-        class_path = os.path.join(output_dir, class_file)
-
-        if class_name in inheritance_map:
-            # Organize by inheritance
-            base_class = inheritance_map[class_name]
-            base_folder = os.path.join(related_folder, base_class)
-            os.makedirs(base_folder, exist_ok=True)
-            new_path = os.path.join(base_folder, class_file)
-        else:
-            # Place directly in `related`
-            new_path = os.path.join(related_folder, class_file)
-
-        if os.path.exists(class_path):
-            os.rename(class_path, new_path)
-
-
-def detect_endpoint_from_class(class_name):
-    """Infer the endpoint name from the class name."""
-    # Example logic: parse class name or use OpenAPI metadata
-    return "POST_claims"  # Placeholder
-
-def detect_class_type(class_name):
-    """Determine if the class is part of the body or response."""
-    # Example logic: check naming conventions or OpenAPI metadata
-    return "body"  # Placeholder
-
-# Call the organization function after generating classes
-output_directory = "java"
-organize_classes_by_endpoint_and_inheritance(output_directory)
 
 if __name__ == '__main__':
     examples_directory = 'examples'
@@ -1340,7 +1240,6 @@ if __name__ == '__main__':
 
     print("=== JSON to Java Class Generator ===\n")
 
-    # Check if quicktype is installed
     has_quicktype = check_quicktype_installed()
 
     if not has_quicktype:
@@ -1352,7 +1251,6 @@ if __name__ == '__main__':
         print("\nFalling back to manual generation (basic support)...\n")
         convert_manually(examples_directory, output_directory, package_name)
     else:
-        # Choose conversion method
         print("Select conversion method:")
         print("1. Use quicktype - individual files")
         print("2. Use quicktype - all files together (recommended)")
