@@ -2,6 +2,11 @@
 examples/
 java/
 
+# Config files
+*.yaml
+*.yml
+*.json
+
 # Python cache
 __pycache__/
 *.pyc
@@ -30,4 +35,3 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-
