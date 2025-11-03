@@ -1,346 +1,346 @@
+#!/usr/bin/env python3
+"""
+Generate Java classes directly from OpenAPI schema for each endpoint.
+Each endpoint gets its own set of classes based solely on the OpenAPI definition.
+"""
 import os
-import subprocess
-import json
-import re
 import yaml
-
-all_classes_fields = {}
-inheritance_map = {}
-oneof_fields_map = {}
-
+import re
+import shutil
 
 def to_java_class_name(name):
-    if name.endswith('.json'):
-        name = name[:-5]
-
+    """Convert schema name to Java class name."""
     if re.match(r'^[A-Z][a-zA-Z0-9]*$', name):
         return name
-
     if re.match(r'^[a-z][a-zA-Z0-9]*$', name):
         return name[0].upper() + name[1:]
-
     name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     parts = re.split(r'[_\s-]+', name)
     return ''.join(word.capitalize() for word in parts if word)
 
-
 def to_java_field_name(name):
+    """Convert to Java field name."""
     if re.match(r'^[a-z][a-zA-Z0-9]*$', name):
         return name
-
     name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     parts = re.split(r'[_\s-]+', name)
     if not parts:
         return name
     return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:] if word)
 
+def get_java_type_from_openapi(schema, schemas, visited=None, field_name=None):
+    """Get Java type from OpenAPI schema definition."""
+    if visited is None:
+        visited = set()
 
-def detect_base_class(class_name, fields):
-    if class_name in inheritance_map:
-        base_class = inheritance_map[class_name]
-        if base_class and base_class != class_name:
-            return base_class
-    return None
-
-
-def load_openapi_inheritance(openapi_file='openapi.yaml'):
-    global inheritance_map
-
-    try:
-        with open(openapi_file, 'r', encoding='utf-8') as f:
-            openapi_spec = yaml.safe_load(f)
-
-        schemas = openapi_spec.get('components', {}).get('schemas', {})
-
-        for schema_name, schema_def in schemas.items():
-            class_name = to_java_class_name(schema_name)
-
-            if isinstance(schema_def, dict) and 'allOf' in schema_def:
-                allof_list = schema_def['allOf']
-
-                if allof_list and len(allof_list) > 0:
-                    first_element = allof_list[0]
-
-                    if isinstance(first_element, dict) and '$ref' in first_element:
-                        ref_path = first_element['$ref']
-                        if ref_path.startswith('#/components/schemas/'):
-                            base_schema_name = ref_path.split('/')[-1]
-                            base_class_name = to_java_class_name(base_schema_name)
-                            inheritance_map[class_name] = base_class_name
-                            print(f"  📋 Detected: {class_name} extends {base_class_name} (from OpenAPI)")
-
-        print(f"\n  Found {len(inheritance_map)} inheritance relationships from OpenAPI schema\n")
-
-    except FileNotFoundError:
-        print(f"  ⚠️  OpenAPI file '{openapi_file}' not found, skipping schema-based inheritance detection\n")
-    except Exception as e:
-        print(f"  ⚠️  Error loading OpenAPI schema: {e}\n")
-
-
-def load_openapi_oneof_fields(openapi_file='openapi.yaml'):
-    global oneof_fields_map, inheritance_map
-
-    try:
-        with open(openapi_file, 'r', encoding='utf-8') as f:
-            openapi_spec = yaml.safe_load(f)
-
-        schemas = openapi_spec.get('components', {}).get('schemas', {})
-
-        for schema_name, schema_def in schemas.items():
-            class_name = to_java_class_name(schema_name)
-
-            # Navigate through the schema to find oneOf fields
-            # Collect all properties from different sources
-            all_properties = {}
-
-            # Handle direct properties
-            if isinstance(schema_def, dict) and 'properties' in schema_def:
-                all_properties.update(schema_def['properties'])
-
-            # Handle allOf with properties - merge all properties from all allOf elements
-            if isinstance(schema_def, dict) and 'allOf' in schema_def:
-                for item in schema_def['allOf']:
-                    if isinstance(item, dict) and 'properties' in item:
-                        all_properties.update(item['properties'])
-
-            # Now check all collected properties for oneOf fields
-            if all_properties:
-                for field_name, field_def in all_properties.items():
-                    if isinstance(field_def, dict) and 'oneOf' in field_def:
-                        # Extract the types from oneOf
-                        oneof_types = []
-                        for ref_item in field_def['oneOf']:
-                            if isinstance(ref_item, dict) and '$ref' in ref_item:
-                                ref_path = ref_item['$ref']
-                                if ref_path.startswith('#/components/schemas/'):
-                                    type_name = ref_path.split('/')[-1]
-                                    java_type = to_java_class_name(type_name)
-                                    oneof_types.append(java_type)
-
-                        if oneof_types:
-                            # Use the field name itself as the base class (without "Base" suffix)
-                            # This handles cases where the JSON generator creates a concrete class
-                            # from the first oneOf option using the field name
-                            base_class_name = to_java_class_name(field_name)
-
-                            if class_name not in oneof_fields_map:
-                                oneof_fields_map[class_name] = {}
-
-                            oneof_fields_map[class_name][field_name] = {
-                                'types': oneof_types,
-                                'baseClass': base_class_name
-                            }
-
-                            # Add inheritance relationships for all oneOf types to extend the base class
-                            for java_type in oneof_types:
-                                # Only add if not already inheriting from something else
-                                if java_type not in inheritance_map:
-                                    inheritance_map[java_type] = base_class_name
-
-                            print(f"  🔀 Detected: {class_name}.{field_name} uses oneOf with {len(oneof_types)} types")
-                            print(f"     → Using {base_class_name} as base class (will be generated as abstract)")
-
-        if oneof_fields_map:
-            total_fields = sum(len(fields) for fields in oneof_fields_map.values())
-            print(f"\n  Found {total_fields} oneOf fields across {len(oneof_fields_map)} classes\n")
-        else:
-            print("  No oneOf fields found\n")
-
-    except FileNotFoundError:
-        print(f"  ⚠️  OpenAPI file '{openapi_file}' not found, skipping oneOf detection\n")
-    except Exception as e:
-        print(f"  ⚠️  Error loading OpenAPI schema for oneOf: {e}\n")
-
-
-def get_inherited_and_new_fields(class_name, all_fields, base_class_name):
-    """
-    Separate fields into inherited and new fields.
-    Returns: (inherited_fields, new_fields)
-    """
-    if not base_class_name or base_class_name not in all_classes_fields:
-        return ([], all_fields)
-
-    base_fields = set(all_classes_fields[base_class_name])
-    inherited = []
-    new_fields = []
-
-    for field_name, field_type in all_fields:
-        if field_name in base_fields:
-            inherited.append((field_name, field_type))
-        else:
-            new_fields.append((field_name, field_type))
-
-    return (inherited, new_fields)
-
-
-def generate_base_class_for_oneof(base_class_name, package="com.mapfre.home.model"):
-    """
-    Generate an empty abstract base class for oneOf polymorphic fields.
-    This serves as a marker interface/base class that all oneOf types will extend.
-    Note: This class may have the same name as a field in the OpenAPI schema,
-    but it represents the polymorphic base type, not a concrete implementation.
-    """
-    java_code = f"package {package};\n\n"
-    java_code += "import lombok.Data;\n"
-    java_code += "import lombok.NoArgsConstructor;\n"
-    java_code += "import lombok.AllArgsConstructor;\n\n"
-    java_code += "@Data\n"
-    java_code += "@NoArgsConstructor\n"
-    java_code += "@AllArgsConstructor\n"
-    java_code += f"public abstract class {base_class_name} {{\n"
-    java_code += "    // Polymorphic base class for oneOf types\n"
-    java_code += "    // All concrete implementations will extend this class\n"
-    java_code += "}\n"
-    return java_code
-
-
-
-def get_java_type(value, field_name=""):
-    """Determine Java type from JSON value."""
-    if value is None:
+    if not schema:
         return "Object"
-    elif isinstance(value, bool):
-        return "Boolean"
-    elif isinstance(value, int):
-        return "Integer" if abs(value) < 2147483647 else "Long"
-    elif isinstance(value, float):
-        return "Double"
-    elif isinstance(value, str):
-        # Check for date-time patterns
-        if re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', value):
+
+    # Handle $ref
+    if '$ref' in schema:
+        ref_name = schema['$ref'].split('/')[-1]
+        if ref_name in visited:
+            return to_java_class_name(ref_name)
+        visited.add(ref_name)
+        if ref_name in schemas:
+            ref_schema = schemas[ref_name]
+            # If the referenced schema is just an array definition, expand it
+            if ref_schema.get('type') == 'array' and 'properties' not in ref_schema and 'allOf' not in ref_schema:
+                items = ref_schema.get('items', {})
+                item_type = get_java_type_from_openapi(items, schemas, visited, field_name=None)
+                return f"List<{item_type}>"
+            return to_java_class_name(ref_name)
+        return "Object"
+
+    # Handle allOf - merge schemas
+    if 'allOf' in schema:
+        # Check if this is an inline inheritance case (properties + $ref)
+        has_inline_props = False
+        has_ref = False
+
+        for item in schema['allOf']:
+            if isinstance(item, dict):
+                if 'properties' in item:
+                    has_inline_props = True
+                if '$ref' in item:
+                    has_ref = True
+
+        # If it has both inline properties and a ref, it's an inline class with inheritance
+        # Return the class name based on field_name
+        if has_inline_props and has_ref and field_name:
+            return to_java_class_name(field_name)
+
+        # If first item is $ref only, it's just inheritance reference
+        if schema['allOf'] and '$ref' in schema['allOf'][0]:
+            return get_java_type_from_openapi(schema['allOf'][0], schemas, visited, field_name)
+
+        # Otherwise find any $ref
+        for item in schema['allOf']:
+            if '$ref' in item:
+                return get_java_type_from_openapi(item, schemas, visited, field_name)
+        return "Object"
+
+    # Handle oneOf - use first type
+    if 'oneOf' in schema:
+        if schema['oneOf'] and '$ref' in schema['oneOf'][0]:
+            return get_java_type_from_openapi(schema['oneOf'][0], schemas, visited, field_name=None)
+        return "Object"
+
+    # Handle type
+    schema_type = schema.get('type', 'object')
+
+    if schema_type == 'string':
+        format_type = schema.get('format', '')
+        if format_type == 'date-time':
             return "LocalDateTime"
-        elif re.match(r'\d{4}-\d{2}-\d{2}', value):
+        elif format_type == 'date':
             return "LocalDate"
         return "String"
-    elif isinstance(value, list):
-        if not value:
-            return "List<Object>"
-        # Infer type from first element
-        item_type = get_java_type(value[0])
+    elif schema_type == 'integer':
+        return "Long"
+    elif schema_type == 'number':
+        return "Double"
+    elif schema_type == 'boolean':
+        return "Boolean"
+    elif schema_type == 'array':
+        items = schema.get('items', {})
+        item_type = get_java_type_from_openapi(items, schemas, visited, field_name=None)
         return f"List<{item_type}>"
-    elif isinstance(value, dict):
-        # Create nested class name
-        class_name = to_java_class_name(field_name) if field_name else "Object"
-        return class_name
+    elif schema_type == 'object':
+        # If it has properties, it's an inline type - generate class name from field name
+        if 'properties' in schema and field_name:
+            return to_java_class_name(field_name)
+        return "Object"
+
     return "Object"
 
+def get_all_schema_dependencies(schema_name, schemas, visited=None):
+    """Recursively get all schema dependencies for a schema."""
+    if visited is None:
+        visited = set()
 
-def generate_java_class_manual(class_name, json_data, package="com.mapfre.home.model", output_dir=None):
-    """Generate Java class code manually from JSON data."""
-    global oneof_fields_map
+    if schema_name in visited or schema_name not in schemas:
+        return visited
 
-    imports = set()
-    imports.add("import lombok.Data;")
-    imports.add("import lombok.Builder;")
-    imports.add("import lombok.NoArgsConstructor;")
-    imports.add("import lombok.AllArgsConstructor;")
+    schema = schemas[schema_name]
 
-    fields = []
-    nested_classes = {}  # Track nested classes to avoid duplicates
-    generic_params = []  # Track generic type parameters for class-level generics
+    # Skip schemas that are just array definitions (no properties, just type: array)
+    # These should be used as List<ItemType>, not as separate classes
+    if schema.get('type') == 'array' and 'properties' not in schema and 'allOf' not in schema:
+        # Don't add this schema, but add the items type
+        if 'items' in schema and '$ref' in schema['items']:
+            ref_name = schema['items']['$ref'].split('/')[-1]
+            get_all_schema_dependencies(ref_name, schemas, visited)
+        return visited
 
-    if not isinstance(json_data, dict):
-        # Handle arrays at root level
+    visited.add(schema_name)
+
+    # Get properties
+    properties = {}
+    if 'properties' in schema:
+        properties.update(schema['properties'])
+
+    # Get properties from allOf
+    if 'allOf' in schema:
+        for item in schema['allOf']:
+            if isinstance(item, dict):
+                if '$ref' in item:
+                    ref_name = item['$ref'].split('/')[-1]
+                    get_all_schema_dependencies(ref_name, schemas, visited)
+                if 'properties' in item:
+                    properties.update(item['properties'])
+
+    # Process each property
+    for prop_name, prop_schema in properties.items():
+        if '$ref' in prop_schema:
+            ref_name = prop_schema['$ref'].split('/')[-1]
+            get_all_schema_dependencies(ref_name, schemas, visited)
+
+        if 'allOf' in prop_schema:
+            for item in prop_schema['allOf']:
+                if '$ref' in item:
+                    ref_name = item['$ref'].split('/')[-1]
+                    get_all_schema_dependencies(ref_name, schemas, visited)
+                # Also check for inline properties within allOf
+                if 'properties' in item:
+                    for sub_prop_name, sub_prop_schema in item['properties'].items():
+                        if '$ref' in sub_prop_schema:
+                            ref_name = sub_prop_schema['$ref'].split('/')[-1]
+                            get_all_schema_dependencies(ref_name, schemas, visited)
+
+        if 'oneOf' in prop_schema:
+            for item in prop_schema['oneOf']:
+                if '$ref' in item:
+                    ref_name = item['$ref'].split('/')[-1]
+                    get_all_schema_dependencies(ref_name, schemas, visited)
+
+        if prop_schema.get('type') == 'array' and 'items' in prop_schema:
+            items = prop_schema['items']
+            if '$ref' in items:
+                ref_name = items['$ref'].split('/')[-1]
+                get_all_schema_dependencies(ref_name, schemas, visited)
+
+        # Handle inline object types with properties
+        if prop_schema.get('type') == 'object' and 'properties' in prop_schema:
+            # Follow references within inline object
+            for inline_prop_name, inline_prop_schema in prop_schema['properties'].items():
+                if '$ref' in inline_prop_schema:
+                    ref_name = inline_prop_schema['$ref'].split('/')[-1]
+                    get_all_schema_dependencies(ref_name, schemas, visited)
+                if 'allOf' in inline_prop_schema:
+                    for item in inline_prop_schema['allOf']:
+                        if '$ref' in item:
+                            ref_name = item['$ref'].split('/')[-1]
+                            get_all_schema_dependencies(ref_name, schemas, visited)
+
+    return visited
+
+def get_base_class(schema_name, schemas):
+    """Get base class if schema uses allOf with $ref as first element."""
+    if schema_name not in schemas:
         return None
 
-    for field_name, value in json_data.items():
-        java_field = to_java_field_name(field_name)
+    schema = schemas[schema_name]
+    if 'allOf' in schema and schema['allOf']:
+        first = schema['allOf'][0]
+        if '$ref' in first:
+            return first['$ref'].split('/')[-1]
 
-        # Check if this field is a oneOf field
-        if class_name in oneof_fields_map and field_name in oneof_fields_map[class_name]:
-            # Use generic type parameter instead of wildcard
-            base_class = oneof_fields_map[class_name][field_name]['baseClass']
-            # Create a generic parameter name from the field name
-            generic_param_name = "T" + to_java_class_name(field_name)
-            generic_params.append(f"{generic_param_name} extends {base_class}")
-            java_type = generic_param_name
-            # Add comment indicating the possible types
-            oneof_types = oneof_fields_map[class_name][field_name]['types']
-            types_comment = f"    // Can be one of: {', '.join(oneof_types)}"
-            fields.append(types_comment)
-        else:
-            java_type, nested_class = get_java_type_with_nested(value, field_name, nested_classes)
+    return None
 
-        # Add imports based on type
-        if "List" in java_type:
-            imports.add("import java.util.List;")
-        if "LocalDateTime" in java_type:
-            imports.add("import java.time.LocalDateTime;")
-        if "LocalDate" in java_type:
-            imports.add("import java.time.LocalDate;")
+def get_schema_properties(schema_name, schemas, include_inherited=False):
+    """Get all properties for a schema."""
+    if schema_name not in schemas:
+        return {}
 
-        # Generate field without @JsonProperty annotation
-        field_def = f'    private {java_type} {java_field};'
-        fields.append(field_def)
+    schema = schemas[schema_name]
+    properties = {}
 
-    # Build the class
-    java_code = f"package {package};\n\n"
-    java_code += "\n".join(sorted(imports)) + "\n\n"
-    java_code += "@Data\n"
-    java_code += "@Builder\n"
-    java_code += "@NoArgsConstructor\n"
-    java_code += "@AllArgsConstructor\n"
+    # Direct properties
+    if 'properties' in schema:
+        properties.update(schema['properties'])
 
-    # Add generic parameters if any oneOf fields exist
-    if generic_params:
-        generic_declaration = f"<{', '.join(generic_params)}>"
-        java_code += f"public class {class_name}{generic_declaration} {{\n\n"
+    # Properties from allOf
+    if 'allOf' in schema:
+        for item in schema['allOf']:
+            if isinstance(item, dict):
+                # Skip $ref if we don't want inherited properties
+                if '$ref' in item and not include_inherited:
+                    continue
+                if '$ref' in item and include_inherited:
+                    ref_name = item['$ref'].split('/')[-1]
+                    inherited = get_schema_properties(ref_name, schemas, True)
+                    properties.update(inherited)
+                if 'properties' in item:
+                    properties.update(item['properties'])
+
+    return properties
+
+def has_oneof_field(schema_name, schemas):
+    """Check if schema has oneOf fields."""
+    props = get_schema_properties(schema_name, schemas, False)
+    for prop_name, prop_schema in props.items():
+        if 'oneOf' in prop_schema:
+            return prop_name, prop_schema['oneOf']
+    return None, None
+
+def find_oneof_base_class(schema_name, schemas):
+    """Find if this schema is part of a oneOf and return the base class name."""
+    # Search through all schemas to find oneOf references
+    for parent_schema_name, parent_schema in schemas.items():
+        props = get_schema_properties(parent_schema_name, schemas, False)
+        for prop_name, prop_schema in props.items():
+            if 'oneOf' in prop_schema:
+                # Check if our schema is in this oneOf
+                for option in prop_schema['oneOf']:
+                    if '$ref' in option:
+                        ref_name = option['$ref'].split('/')[-1]
+                        if ref_name == schema_name:
+                            # This schema is part of a oneOf, return the base class name
+                            return to_java_class_name(prop_name)
+    return None
+
+def generate_java_class_from_schema(schema_name, schemas, package, processed=None):
+    """Generate Java class from OpenAPI schema."""
+    if processed is None:
+        processed = set()
+
+    if schema_name in processed or schema_name not in schemas:
+        return None
+
+    schema = schemas[schema_name]
+
+    # Skip schemas that are just array definitions (no properties, just type: array)
+    # These should be used as List<ItemType>, not as separate classes
+    if schema.get('type') == 'array' and 'properties' not in schema and 'allOf' not in schema:
+        return None
+
+    processed.add(schema_name)
+
+    class_name = to_java_class_name(schema_name)
+
+    # Check for base class from allOf
+    base_class = get_base_class(schema_name, schemas)
+    base_class_name = to_java_class_name(base_class) if base_class else None
+
+    # If no allOf base class, check if this is part of a oneOf
+    if not base_class_name:
+        oneof_base = find_oneof_base_class(schema_name, schemas)
+        if oneof_base:
+            base_class_name = oneof_base
+
+    # Get properties (exclude inherited if has base class)
+    all_props = get_schema_properties(schema_name, schemas, True)
+    if base_class_name:
+        base_props = get_schema_properties(base_class, schemas, True)
+        own_props = {k: v for k, v in all_props.items() if k not in base_props}
     else:
-        java_code += f"public class {class_name} {{\n\n"
+        own_props = all_props
 
-    java_code += "\n".join(fields)
-    java_code += "\n}\n"
+    # Check for oneOf fields
+    oneof_field_name, oneof_types = has_oneof_field(schema_name, schemas)
+    generic_param = None
+    if oneof_field_name and oneof_types:
+        # Create generic parameter
+        base_type_name = to_java_class_name(oneof_field_name)
+        generic_param = f"T{base_type_name} extends {base_type_name}"
 
-    # Generate separate files for nested classes
-    if nested_classes and output_dir:
-        for nested_name, nested_data in nested_classes.items():
-            generate_nested_class_file(nested_name, nested_data, package, output_dir)
-
-    return java_code
-
-
-def generate_java_class_with_inheritance(class_name, json_data, base_class_name=None, package="com.mapfre.home.model", output_dir=None):
-    """Generate Java class code with inheritance support."""
-    global oneof_fields_map
-
+    # Build imports
     imports = set()
     imports.add("import lombok.Data;")
     imports.add("import lombok.NoArgsConstructor;")
     imports.add("import lombok.AllArgsConstructor;")
 
-    # Use @EqualsAndHashCode(callSuper=true) if extending a class
     if base_class_name:
         imports.add("import lombok.EqualsAndHashCode;")
-        imports.add("import lombok.Builder;")
     else:
         imports.add("import lombok.Builder;")
 
+    # Build fields
     fields = []
-    nested_classes = {}
-    generic_params = []  # Track generic type parameters for class-level generics
+    referenced_classes = set()
 
-    if not isinstance(json_data, dict):
-        return None
+    for prop_name, prop_schema in own_props.items():
+        java_field = to_java_field_name(prop_name)
 
-    # Collect all fields with their types
-    all_field_info = []
-    for field_name, value in json_data.items():
-        java_field = to_java_field_name(field_name)
-
-        # Check if this field is a oneOf field
-        if class_name in oneof_fields_map and field_name in oneof_fields_map[class_name]:
-            # Use generic type parameter instead of wildcard
-            base_class = oneof_fields_map[class_name][field_name]['baseClass']
-            # Create a generic parameter name from the field name
-            generic_param_name = "T" + to_java_class_name(field_name)
-            generic_params.append(f"{generic_param_name} extends {base_class}")
-            java_type = generic_param_name
+        # Check if this is the oneOf field
+        if oneof_field_name and prop_name == oneof_field_name:
+            java_type = f"T{to_java_class_name(prop_name)}"
+            types_list = [to_java_class_name(t.get('$ref', '').split('/')[-1]) for t in oneof_types if '$ref' in t]
+            fields.append(f"    // Can be one of: {', '.join(types_list)}")
+            # Add base class to referenced classes
+            referenced_classes.add(to_java_class_name(prop_name))
         else:
-            java_type, nested_class = get_java_type_with_nested(value, field_name, nested_classes)
+            java_type = get_java_type_from_openapi(prop_schema, schemas, field_name=prop_name)
 
-        all_field_info.append((field_name, java_field, java_type))
+            # Extract class names from type
+            # Handle List<ClassName>, ClassName, etc.
+            type_classes = re.findall(r'\b([A-Z][a-zA-Z0-9]*)\b', java_type)
+            for type_class in type_classes:
+                if type_class not in ['String', 'Integer', 'Long', 'Double', 'Boolean', 'LocalDate', 'LocalDateTime', 'Object', 'List']:
+                    referenced_classes.add(type_class)
 
-        # Add imports based on type
+        # Add necessary imports
         if "List" in java_type:
             imports.add("import java.util.List;")
         if "LocalDateTime" in java_type:
@@ -348,29 +348,17 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
         if "LocalDate" in java_type:
             imports.add("import java.time.LocalDate;")
 
-    # If there's a base class, filter out inherited fields
-    if base_class_name and base_class_name in all_classes_fields:
-        base_field_names = set(all_classes_fields[base_class_name])
-        for orig_name, java_field, java_type in all_field_info:
-            if orig_name not in base_field_names:
-                # Add comment for oneOf fields
-                if class_name in oneof_fields_map and orig_name in oneof_fields_map[class_name]:
-                    oneof_types = oneof_fields_map[class_name][orig_name]['types']
-                    types_comment = f"    // Can be one of: {', '.join(oneof_types)}"
-                    fields.append(types_comment)
-                field_def = f'    private {java_type} {java_field};'
-                fields.append(field_def)
-    else:
-        for orig_name, java_field, java_type in all_field_info:
-            # Add comment for oneOf fields
-            if class_name in oneof_fields_map and orig_name in oneof_fields_map[class_name]:
-                oneof_types = oneof_fields_map[class_name][orig_name]['types']
-                types_comment = f"    // Can be one of: {', '.join(oneof_types)}"
-                fields.append(types_comment)
-            field_def = f'    private {java_type} {java_field};'
-            fields.append(field_def)
+        fields.append(f"    private {java_type} {java_field};")
 
-    # Build the class
+    # Add base class to referenced classes if exists
+    if base_class_name:
+        referenced_classes.add(base_class_name)
+
+    # Don't add imports for referenced classes - commented out
+    # for ref_class in sorted(referenced_classes):
+    #     imports.add(f"import {package}.{ref_class};")
+
+    # Build class
     java_code = f"package {package};\n\n"
     java_code += "\n".join(sorted(imports)) + "\n\n"
     java_code += "@Data\n"
@@ -381,530 +369,99 @@ def generate_java_class_with_inheritance(class_name, json_data, base_class_name=
     java_code += "@NoArgsConstructor\n"
     java_code += "@AllArgsConstructor\n"
 
-    # Add extends clause if there's a base class
-    # Add generic parameters if any oneOf fields exist
-    generic_declaration = f"<{', '.join(generic_params)}>" if generic_params else ""
-
+    # Class declaration
     if base_class_name:
-        java_code += f"public class {class_name}{generic_declaration} extends {base_class_name} {{\n\n"
+        if generic_param:
+            java_code += f"public class {class_name}<{generic_param}> extends {base_class_name} {{\n\n"
+        else:
+            java_code += f"public class {class_name} extends {base_class_name} {{\n\n"
     else:
         java_code += "@Builder\n"
-        java_code += f"public class {class_name}{generic_declaration} {{\n\n"
+        if generic_param:
+            java_code += f"public class {class_name}<{generic_param}> {{\n\n"
+        else:
+            java_code += f"public class {class_name} {{\n\n"
 
     if fields:
         java_code += "\n".join(fields)
     else:
-        java_code += "    // All fields inherited from " + base_class_name if base_class_name else "    // No fields"
+        if base_class_name:
+            java_code += f"    // All fields inherited from {base_class_name}"
+        else:
+            java_code += "    // No fields"
 
     java_code += "\n}\n"
-
-    # Generate separate files for nested classes
-    if nested_classes and output_dir:
-        for nested_name, nested_data in nested_classes.items():
-            generate_nested_class_file(nested_name, nested_data, package, output_dir)
 
     return java_code
 
-
-
-def get_java_type_with_nested(value, field_name, nested_classes_dict):
-    """
-    Determine Java type from JSON value and collect nested class definitions.
-    Returns: (java_type_string, nested_class_data_or_none)
-    """
-    if value is None:
-        return ("String", None)  # Default to String for null values
-    elif isinstance(value, bool):
-        return ("Boolean", None)
-    elif isinstance(value, int):
-        return ("Long", None)  # Use Long to handle all integer sizes
-    elif isinstance(value, float):
-        return ("Double", None)
-    elif isinstance(value, str):
-        # Check for date-time patterns
-        if re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', value):
-            return ("LocalDateTime", None)
-        elif re.match(r'\d{4}-\d{2}-\d{2}', value):
-            return ("LocalDate", None)
-        return ("String", None)
-    elif isinstance(value, list):
-        if not value:
-            return ("List<Object>", None)
-        # Infer type from first element
-        first_item = value[0]
-        if isinstance(first_item, dict):
-            # Create nested class for list items - singularize the field name
-            singular_name = field_name.rstrip('s') if field_name.endswith('s') else field_name
-            # Preserve the original casing pattern
-            nested_class_name = to_java_class_name(singular_name)
-            nested_classes_dict[nested_class_name] = first_item
-            return (f"List<{nested_class_name}>", None)
-        else:
-            item_type, _ = get_java_type_with_nested(first_item, field_name, nested_classes_dict)
-            return (f"List<{item_type}>", None)
-    elif isinstance(value, dict):
-        # Create nested class - preserve original casing
-        nested_class_name = to_java_class_name(field_name)
-        nested_classes_dict[nested_class_name] = value
-        return (nested_class_name, value)
-    return ("Object", None)
-
-
-def generate_nested_class(class_name, json_data):
-    """Generate a nested Java class."""
-    if not isinstance(json_data, dict):
-        return ""
-
-    fields = []
-    inner_nested = {}
-
-    for field_name, value in json_data.items():
-        java_field = to_java_field_name(field_name)
-        java_type, nested_data = get_java_type_with_nested(value, field_name, inner_nested)
-
-        field_def = f'        private {java_type} {java_field};'
-        fields.append(field_def)
-
-    nested_code = "    @Data\n"
-    nested_code += "    @Builder\n"
-    nested_code += "    @NoArgsConstructor\n"
-    nested_code += "    @AllArgsConstructor\n"
-    nested_code += f"    public static class {class_name} {{\n\n"
-    nested_code += "\n".join(fields)
-
-    # Add deeply nested classes
-    if inner_nested:
-        nested_code += "\n\n"
-        inner_code = []
-        for inner_name, inner_data in inner_nested.items():
-            inner_class = generate_deeply_nested_class(inner_name, inner_data)
-            if inner_class:
-                inner_code.append(inner_class)
-        nested_code += "\n\n".join(inner_code)
-
-    nested_code += "\n    }"
-
-    return nested_code
-
-
-def generate_nested_class_file(class_name, json_data, package, output_dir):
-    """Generate a nested class as a separate file."""
-    if not isinstance(json_data, dict):
-        return
-
-    imports = set()
-    imports.add("import lombok.Data;")
-    imports.add("import lombok.Builder;")
-    imports.add("import lombok.NoArgsConstructor;")
-    imports.add("import lombok.AllArgsConstructor;")
-
-    fields = []
-    inner_nested = {}
-
-    for field_name, value in json_data.items():
-        java_field = to_java_field_name(field_name)
-        java_type, nested_data = get_java_type_with_nested(value, field_name, inner_nested)
-
-        # Add imports based on type
-        if "List" in java_type:
-            imports.add("import java.util.List;")
-        if "LocalDateTime" in java_type:
-            imports.add("import java.time.LocalDateTime;")
-        if "LocalDate" in java_type:
-            imports.add("import java.time.LocalDate;")
-
-        field_def = f'    private {java_type} {java_field};'
-        fields.append(field_def)
-
-    # Build the class
+def generate_base_class_for_oneof(base_name, package):
+    """Generate abstract base class for oneOf."""
     java_code = f"package {package};\n\n"
-    java_code += "\n".join(sorted(imports)) + "\n\n"
+    java_code += "import lombok.Data;\n"
+    java_code += "import lombok.NoArgsConstructor;\n"
+    java_code += "import lombok.AllArgsConstructor;\n\n"
     java_code += "@Data\n"
-    java_code += "@Builder\n"
     java_code += "@NoArgsConstructor\n"
     java_code += "@AllArgsConstructor\n"
-    java_code += f"public class {class_name} {{\n\n"
-    java_code += "\n".join(fields)
-    java_code += "\n}\n"
+    java_code += f"public abstract class {base_name} {{\n"
+    java_code += "    // Polymorphic base class for oneOf types\n"
+    java_code += "    // All concrete implementations will extend this class\n"
+    java_code += "}\n"
+    return java_code
 
-    # Write to file
-    output_file = os.path.join(output_dir, f"{class_name}.java")
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(java_code)
-
-    # Generate files for deeply nested classes
-    if inner_nested:
-        for inner_name, inner_data in inner_nested.items():
-            generate_nested_class_file(inner_name, inner_data, package, output_dir)
-
-
-def generate_deeply_nested_class(class_name, json_data):
-    """Generate a deeply nested class (3rd level)."""
-    if not isinstance(json_data, dict):
-        return ""
-
-    fields = []
-
-    for field_name, value in json_data.items():
-        java_field = to_java_field_name(field_name)
-        java_type = get_java_type(value, field_name)
-
-        field_def = f'            private {java_type} {java_field};'
-        fields.append(field_def)
-
-    nested_code = "        @Data\n"
-    nested_code += "        @Builder\n"
-    nested_code += "        @NoArgsConstructor\n"
-    nested_code += "        @AllArgsConstructor\n"
-    nested_code += f"        public static class {class_name} {{\n\n"
-    nested_code += "\n".join(fields)
-    nested_code += "\n        }"
-
-    return nested_code
-
-
-def convert_json_to_java(examples_dir, output_dir):
+def organize_classes_in_folder(folder_dir, main_class_name, all_generated_classes, schemas):
     """
-    Convert JSON example files to Java classes using quicktype.
-    Generates Spring-compatible POJOs with Lombok annotations.
+    Organize classes in a folder: main class at root, related in subfolder grouped by inheritance.
     """
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    import shutil
 
-    # Get all JSON files from examples directory
-    json_files = [f for f in os.listdir(examples_dir) if f.endswith('.json')]
+    # Create a temporary directory to hold files during reorganization
+    temp_dir = folder_dir + "_temp"
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+    os.makedirs(temp_dir)
 
-    if not json_files:
-        print("No JSON files found in examples directory.")
-        return
-
-    print(f"\n=== Converting {len(json_files)} JSON files to Java classes ===\n")
-
-    for json_file in json_files:
-        json_path = os.path.join(examples_dir, json_file)
-        class_name = json_file.replace('.json', '')
-
-        # Skip empty or invalid JSON files
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if not data:
-                    print(f"⚠️  Skipping {json_file} (empty)")
-                    continue
-        except json.JSONDecodeError as e:
-            print(f"⚠️  Skipping {json_file} (invalid JSON: {e})")
-            continue
-        except Exception as e:
-            print(f"⚠️  Skipping {json_file} (error: {e})")
-            continue
-
-        # Define output path for Java file
-        output_file = os.path.join(output_dir, f"{class_name}.java")
-
-        # Build quicktype command
-        # Options:
-        # --lang java: Generate Java code
-        # --src: Source JSON file
-        # --out: Output Java file
-        # --package: Java package name
-        # --lombok: Use Lombok annotations (@Data, @Builder, etc.)
-        # --jackson: Use Jackson annotations for JSON serialization
-        # --just-types: Only generate types, no additional code
-        quicktype_cmd = [
-            'quicktype',
-            '--lang', 'java',
-            '--src', json_path,
-            '--out', output_file,
-            '--package', 'com.mapfre.home.model',
-            '--lombok',
-            '--jackson',
-            '--just-types'
-        ]
-
-        try:
-            result = subprocess.run(
-                quicktype_cmd,
-                capture_output=True,
-                text=True,
-                check=True
+    # Move all files to temp
+    for filename in os.listdir(folder_dir):
+        if filename.endswith('.java'):
+            shutil.move(
+                os.path.join(folder_dir, filename),
+                os.path.join(temp_dir, filename)
             )
-            print(f"✅ Generated {class_name}.java")
 
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Failed to generate {class_name}.java")
-            if e.stderr:
-                print(f"   Error: {e.stderr.strip()}")
-        except FileNotFoundError:
-            print("❌ Error: quicktype is not installed.")
-            print("   Install it with: npm install -g quicktype")
-            return
-
-
-def convert_all_to_single_package(examples_dir, output_dir):
-    """
-    Alternative approach: Convert all JSON files at once to a single package.
-    This allows quicktype to better handle shared types and references.
-    """
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Get all JSON files
-    json_files = [os.path.join(examples_dir, f) for f in os.listdir(examples_dir) if f.endswith('.json')]
-
-    if not json_files:
-        print("No JSON files found in examples directory.")
-        return
-
-    print(f"\n=== Converting all JSON files to Java package ===\n")
-
-    # Build quicktype command with all files
-    quicktype_cmd = [
-        'quicktype',
-        '--lang', 'java',
-        '--src-lang', 'json',
-        '--out', output_dir,
-        '--package', 'com.mapfre.home.model',
-        '--lombok',
-        '--jackson',
-        '--just-types',
-        '--array-type', 'list'
-    ] + json_files
-
-    try:
-        result = subprocess.run(
-            quicktype_cmd,
-            capture_output=True,
-            text=True,
-            check=True
+    # Move main class back to root
+    main_file = f"{main_class_name}.java"
+    if os.path.exists(os.path.join(temp_dir, main_file)):
+        shutil.move(
+            os.path.join(temp_dir, main_file),
+            os.path.join(folder_dir, main_file)
         )
 
-        # Count generated files
-        java_files = [f for f in os.listdir(output_dir) if f.endswith('.java')]
-        print(f"✅ Generated {len(java_files)} Java class files in {output_dir}")
-        print(f"   Package: com.mapfre.home.model")
+    # Create related folder
+    related_dir = os.path.join(folder_dir, 'related')
+    os.makedirs(related_dir, exist_ok=True)
 
-    except subprocess.CalledProcessError as e:
-        print("❌ Failed to generate Java classes")
-        if e.stderr:
-            print(f"   Error: {e.stderr.strip()}")
-    except FileNotFoundError:
-        print("❌ Error: quicktype is not installed.")
-        print("   Install it with: npm install -g quicktype")
-        return
-
-
-def check_quicktype_installed():
-    """Check if quicktype is installed."""
-    try:
-        result = subprocess.run(
-            ['quicktype', '--version'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        print(f"✓ quicktype version: {result.stdout.strip()}\n")
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
-
-def convert_manually(examples_dir, output_dir, package="com.mapfre.home.model"):
-    """
-    Manually generate Java classes from JSON files without quicktype.
-    This is a fallback method with inheritance detection.
-    Reads from organized structure: examples/ENDPOINT/body|response/[related/]*.json
-    """
-    global all_classes_fields
-
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Collect all JSON files recursively from organized structure
-    json_files_data = []
-
-    for root, dirs, files in os.walk(examples_dir):
-        for filename in files:
-            if filename.endswith('.json'):
-                json_path = os.path.join(root, filename)
-                json_files_data.append((filename, json_path))
-
-    if not json_files_data:
-        print("No JSON files found.")
-        return
-
-    print(f"\n=== Manually generating Java classes from {len(json_files_data)} JSON files ===\n")
-    print("Pass 1: Analyzing class structures for inheritance...\n")
-
-    # Load inheritance relationships from OpenAPI schema
-    load_openapi_inheritance('openapi.yaml')
-
-    # Load oneOf fields from OpenAPI schema
-    load_openapi_oneof_fields('openapi.yaml')
-
-    # First pass: collect all class structures
-    class_data = {}
-    seen_classes = set()  # Track classes we've already processed to avoid duplicates
-
-    for json_file, json_path in json_files_data:
-        class_name = to_java_class_name(json_file.replace('.json', ''))
-
-        # Skip if we've already processed this class (from another endpoint)
-        if class_name in seen_classes:
-            continue
-
-        seen_classes.add(class_name)
-
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            if not isinstance(data, dict):
-                continue
-
-            # Collect field names
-            field_names = list(data.keys())
-            all_classes_fields[class_name] = field_names
-            class_data[class_name] = (json_path, data)
-
-        except Exception as e:
-            continue
-
-    print(f"Analyzed {len(all_classes_fields)} classes\n")
-
-    # Generate base classes for oneOf fields
-    print("Pass 1.5: Generating base classes for oneOf fields...\n")
-
-    base_classes_generated = set()
-    for class_name, field_map in oneof_fields_map.items():
-        for field_name, field_info in field_map.items():
-            base_class_name = field_info['baseClass']
-            if base_class_name not in base_classes_generated:
-                # Generate empty base class
-                java_code = generate_base_class_for_oneof(base_class_name, package)
-                output_file = os.path.join(output_dir, f"{base_class_name}.java")
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    f.write(java_code)
-                print(f"✅ Generated base class {base_class_name}.java")
-                base_classes_generated.add(base_class_name)
-
-    if base_classes_generated:
-        print(f"\n✅ Generated {len(base_classes_generated)} base classes for oneOf fields\n")
-
-    print("Pass 2: Generating Java classes...\n")
-
-    # Second pass: generate all classes (without inheritance initially)
-    # Skip classes that are oneOf base classes (already generated as abstract)
-    generated = 0
-    for class_name, (json_path, data) in class_data.items():
-        # Skip if this class is a oneOf base class (already generated as abstract empty class)
-        if class_name in base_classes_generated:
-            print(f"⏭️  Skipping {class_name}.java (oneOf base class already generated)")
-            continue
-
-        try:
-            # Generate without inheritance first
-            java_code = generate_java_class_manual(class_name, data, package, output_dir)
-
-            if java_code:
-                output_file = os.path.join(output_dir, f"{class_name}.java")
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    f.write(java_code)
-                print(f"✅ Generated {class_name}.java")
-                generated += 1
-            else:
-                print(f"⚠️  Skipping {class_name} (could not generate)")
-
-        except Exception as e:
-            print(f"❌ Failed to generate {class_name}.java: {e}")
-
-    print(f"\n✅ Generated {generated} Java class files")
-
-    # Third pass: Detect inheritance and regenerate classes that should extend base classes
-    print("\nPass 3: Detecting inheritance and regenerating classes...\n")
-
-    regenerated = 0
-    for class_name, (json_path, data) in class_data.items():
-        try:
-            # Detect base class
-            base_class = detect_base_class(class_name, all_classes_fields[class_name])
-
-            if base_class:
-                # Regenerate with inheritance
-                java_code = generate_java_class_with_inheritance(
-                    class_name, data, base_class, package, output_dir
-                )
-
-                if java_code:
-                    output_file = os.path.join(output_dir, f"{class_name}.java")
-                    with open(output_file, 'w', encoding='utf-8') as f:
-                        f.write(java_code)
-                    print(f"🔄 Regenerated {class_name}.java (extends {base_class})")
-                    regenerated += 1
-
-        except Exception as e:
-            print(f"❌ Failed to regenerate {class_name}.java: {e}")
-
-    print(f"\n✅ Regenerated {regenerated} classes with inheritance")
-
-    # Fourth pass: Organize classes into folders by domain
-    print("\nPass 4: Organizing classes into domain folders...\n")
-    organize_classes_by_domain(output_dir, package)
-
-
-def organize_classes_by_domain(output_dir, base_package):
-    """Organize generated classes by OpenAPI endpoints with body/response/related structure."""
-    import re
-    import yaml
-
-    print("  Analyzing OpenAPI endpoints...")
-
-    # Load OpenAPI to get endpoints
-    try:
-        with open('openapi.yaml', 'r', encoding='utf-8') as f:
-            openapi_spec = yaml.safe_load(f)
-    except:
-        print("  ⚠️  Could not load openapi.yaml")
-        return
-
-    # Analyze all generated Java files first
+    # Analyze inheritance relationships
     class_info = {}
-
-    for filename in os.listdir(output_dir):
+    for filename in os.listdir(temp_dir):
         if not filename.endswith('.java'):
             continue
 
-        filepath = os.path.join(output_dir, filename)
+        class_name = filename[:-5]
+        filepath = os.path.join(temp_dir, filename)
+
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
-
-        # Extract class name
-        class_match = re.search(r'public\s+(?:abstract\s+)?class\s+(\w+)', content)
-        if not class_match:
-            continue
-
-        class_name = class_match.group(1)
 
         # Extract extends
         extends_match = re.search(r'extends\s+(\w+)', content)
         extends = extends_match.group(1) if extends_match else None
 
-        # Extract field types (references)
-        references = set()
-        for match in re.finditer(r'private\s+(?:List<)?(\w+)>?\s+\w+;', content):
-            field_type = match.group(1)
-            if field_type not in ['String', 'Integer', 'Long', 'Double', 'Boolean', 'LocalDate', 'LocalDateTime', 'Object']:
-                references.add(field_type)
-
-        # Extract generic bounds
-        generic_match = re.search(r'class\s+\w+<\w+\s+extends\s+(\w+)>', content)
-        if generic_match:
-            references.add(generic_match.group(1))
-
         class_info[class_name] = {
-            'file': filename,
+            'filename': filename,
             'extends': extends,
-            'references': list(references),
-            'children': []
+            'children': [],
+            'content': content
         }
 
     # Build children relationships
@@ -912,41 +469,482 @@ def organize_classes_by_domain(output_dir, base_package):
         if info['extends'] and info['extends'] in class_info:
             class_info[info['extends']]['children'].append(class_name)
 
-    def get_all_dependencies(class_name, visited=None):
-        """Recursively get ALL dependencies including polymorphic children."""
-        if visited is None:
-            visited = set()
-
-        if class_name in visited or class_name not in class_info:
-            return visited
-
-        visited.add(class_name)
-        info = class_info[class_name]
-
-        # Include direct base class too (so bases are present for grouping)
-        if info['extends']:
-            get_all_dependencies(info['extends'], visited)
-
-        # Add all field references
-        for ref in info['references']:
-            get_all_dependencies(ref, visited)
-
-        # Add all children (polymorphic implementations)
-        for child in info['children']:
-            get_all_dependencies(child, visited)
-
-        return visited
-
-    def to_camel_case_folder(name: str) -> str:
-        """Convert PascalCase to camelCase for folder names."""
+    def to_camel_case(name):
+        """Convert PascalCase to camelCase."""
         if not name:
             return name
         return name[0].lower() + name[1:]
 
-    # Extract endpoints from OpenAPI
-    endpoints_data = []
-    paths = openapi_spec.get('paths', {})
+    # Organize files: group by inheritance
+    processed = set()
 
+    # First, handle inheritance groups (base class + children)
+    for class_name, info in class_info.items():
+        if class_name in processed:
+            continue
+
+        # If this class has children, create a subfolder for the family
+        if info['children']:
+            family_dir = os.path.join(related_dir, to_camel_case(class_name))
+            os.makedirs(family_dir, exist_ok=True)
+
+            # Move base class
+            dest = os.path.join(family_dir, info['filename'])
+            with open(dest, 'w', encoding='utf-8') as f:
+                f.write(info['content'])
+            processed.add(class_name)
+
+            # Move children
+            for child_name in info['children']:
+                child_info = class_info[child_name]
+                dest = os.path.join(family_dir, child_info['filename'])
+                with open(dest, 'w', encoding='utf-8') as f:
+                    f.write(child_info['content'])
+                processed.add(child_name)
+
+    # Move remaining classes (no inheritance) to related root
+    for class_name, info in class_info.items():
+        if class_name in processed:
+            continue
+
+        dest = os.path.join(related_dir, info['filename'])
+        with open(dest, 'w', encoding='utf-8') as f:
+            f.write(info['content'])
+        processed.add(class_name)
+
+    # Clean up temp directory
+    shutil.rmtree(temp_dir)
+
+def generate_inline_classes(schema_name, schemas, package, folder_dir):
+    """
+    Generate Java classes for inline object types found in a schema.
+    Returns a set of generated class names.
+    """
+    if schema_name not in schemas:
+        return set()
+
+    generated = set()
+    schema = schemas[schema_name]
+
+    # Get all properties
+    properties = {}
+    if 'properties' in schema:
+        properties.update(schema['properties'])
+
+    if 'allOf' in schema:
+        for item in schema['allOf']:
+            if isinstance(item, dict) and 'properties' in item:
+                properties.update(item['properties'])
+
+    # Check each property for inline object types
+    for prop_name, prop_schema in properties.items():
+        # Case 1: Direct inline object with properties
+        if prop_schema.get('type') == 'object' and 'properties' in prop_schema:
+            # This is an inline type - generate a class for it
+            inline_class_name = to_java_class_name(prop_name)
+
+            # Create inline schema as a standalone schema
+            inline_schema = {
+                'type': 'object',
+                'properties': prop_schema.get('properties', {}),
+                'required': prop_schema.get('required', [])
+            }
+
+            # Generate the class
+            java_code = generate_java_class_from_inline_schema(
+                inline_class_name,
+                inline_schema,
+                schemas,
+                package
+            )
+
+            if java_code:
+                filepath = os.path.join(folder_dir, f"{inline_class_name}.java")
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(java_code)
+                generated.add(inline_class_name)
+
+        # Case 2: allOf with inline properties + $ref (inheritance with extra properties)
+        elif 'allOf' in prop_schema:
+            # Check if this allOf has inline properties (not just refs)
+            has_inline_props = False
+            base_class_ref = None
+            inline_props = {}
+
+            for item in prop_schema['allOf']:
+                if isinstance(item, dict):
+                    if 'properties' in item:
+                        has_inline_props = True
+                        inline_props.update(item.get('properties', {}))
+                    if '$ref' in item:
+                        base_class_ref = item['$ref'].split('/')[-1]
+
+            # If it has both inline properties and a base class, generate an inline class with inheritance
+            if has_inline_props and base_class_ref:
+                inline_class_name = to_java_class_name(prop_name)
+
+                # Create inline schema with inheritance
+                inline_schema = {
+                    'type': 'object',
+                    'properties': inline_props,
+                    'base_class': base_class_ref  # Custom property for base class
+                }
+
+                # Generate the class
+                java_code = generate_java_class_from_inline_schema(
+                    inline_class_name,
+                    inline_schema,
+                    schemas,
+                    package
+                )
+
+                if java_code:
+                    filepath = os.path.join(folder_dir, f"{inline_class_name}.java")
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(java_code)
+                    generated.add(inline_class_name)
+
+    return generated
+
+def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, package):
+    """Generate Java class from an inline schema definition."""
+    imports = set()
+    imports.add("import lombok.Data;")
+    imports.add("import lombok.NoArgsConstructor;")
+    imports.add("import lombok.AllArgsConstructor;")
+
+    # Check if this inline class has a base class
+    base_class = inline_schema.get('base_class')
+    if base_class:
+        imports.add("import lombok.EqualsAndHashCode;")
+    else:
+        imports.add("import lombok.Builder;")
+
+    fields = []
+    referenced_classes = set()
+
+    # Add base class to referenced classes
+    if base_class:
+        referenced_classes.add(base_class)
+
+    properties = inline_schema.get('properties', {})
+
+    for prop_name, prop_schema in properties.items():
+        java_field = to_java_field_name(prop_name)
+        java_type = get_java_type_from_openapi(prop_schema, schemas, field_name=prop_name)
+
+        # Extract class names from type
+        type_classes = re.findall(r'\b([A-Z][a-zA-Z0-9]*)\b', java_type)
+        for type_class in type_classes:
+            if type_class not in ['String', 'Integer', 'Long', 'Double', 'Boolean', 'LocalDate', 'LocalDateTime', 'Object', 'List']:
+                referenced_classes.add(type_class)
+
+        # Add necessary imports
+        if "List" in java_type:
+            imports.add("import java.util.List;")
+        if "LocalDateTime" in java_type:
+            imports.add("import java.time.LocalDateTime;")
+        if "LocalDate" in java_type:
+            imports.add("import java.time.LocalDate;")
+
+        fields.append(f"    private {java_type} {java_field};")
+
+    # Don't add imports for referenced classes - commented out
+    # for ref_class in sorted(referenced_classes):
+    #     imports.add(f"import {package}.{ref_class};")
+
+    # Build class
+    java_code = f"package {package};\n\n"
+    java_code += "\n".join(sorted(imports)) + "\n\n"
+    java_code += "@Data\n"
+
+    if base_class:
+        java_code += "@EqualsAndHashCode(callSuper = true)\n"
+
+    java_code += "@NoArgsConstructor\n"
+    java_code += "@AllArgsConstructor\n"
+
+    if not base_class:
+        java_code += "@Builder\n"
+
+    if base_class:
+        java_code += f"public class {class_name} extends {base_class} {{\n\n"
+    else:
+        java_code += f"public class {class_name} {{\n\n"
+
+    if fields:
+        java_code += "\n".join(fields)
+    else:
+        if base_class:
+            java_code += f"    // All fields inherited from {base_class}"
+        else:
+            java_code += "    // No fields"
+
+    java_code += "\n}\n"
+
+    return java_code
+
+def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package):
+    """Process a single endpoint and generate all necessary classes."""
+    print(f"\n📁 Processing endpoint: {endpoint_name}")
+
+    endpoint_dir = os.path.join(output_dir, endpoint_name)
+    all_schemas_for_endpoint = set()
+
+    # Process request body
+    if request_schema and request_schema in schemas:
+        print(f"   📄 Request: {request_schema}")
+        body_dir = os.path.join(endpoint_dir, 'body')
+        os.makedirs(body_dir, exist_ok=True)
+
+        # Get all dependencies for request
+        deps = get_all_schema_dependencies(request_schema, schemas)
+        all_schemas_for_endpoint.update(deps)
+
+        # Generate classes
+        generated = set()
+        for schema_name in sorted(deps):
+            if schema_name in generated:
+                continue
+
+            # Check for oneOf base class
+            oneof_field, oneof_types = has_oneof_field(schema_name, schemas)
+            if oneof_field and oneof_types:
+                base_name = to_java_class_name(oneof_field)
+                if base_name not in generated:
+                    java_code = generate_base_class_for_oneof(base_name, package)
+                    filepath = os.path.join(body_dir, f"{base_name}.java")
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(java_code)
+                    generated.add(base_name)
+
+            java_code = generate_java_class_from_schema(schema_name, schemas, package)
+            if java_code:
+                filepath = os.path.join(body_dir, f"{to_java_class_name(schema_name)}.java")
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(java_code)
+                generated.add(schema_name)
+
+        # Generate inline classes
+        for schema_name in sorted(deps):
+            inline_generated = generate_inline_classes(schema_name, schemas, package, body_dir)
+            generated.update(inline_generated)
+
+        print(f"      ✅ Generated {len(generated)} classes for request")
+
+        # Organize classes in body folder
+        organize_classes_in_folder(body_dir, to_java_class_name(request_schema), generated, schemas)
+        print(f"      📂 Organized into main class + related/")
+
+    # Process responses
+    for response_schema in response_schemas:
+        if response_schema not in schemas:
+            continue
+
+        print(f"   📄 Response: {response_schema}")
+        response_dir = os.path.join(endpoint_dir, 'response')
+        os.makedirs(response_dir, exist_ok=True)
+
+        # Get all dependencies for response
+        deps = get_all_schema_dependencies(response_schema, schemas)
+        all_schemas_for_endpoint.update(deps)
+
+        # Generate classes
+        generated = set()
+        for schema_name in sorted(deps):
+            if schema_name in generated:
+                continue
+
+            # Check for oneOf base class
+            oneof_field, oneof_types = has_oneof_field(schema_name, schemas)
+            if oneof_field and oneof_types:
+                base_name = to_java_class_name(oneof_field)
+                if base_name not in generated:
+                    java_code = generate_base_class_for_oneof(base_name, package)
+                    filepath = os.path.join(response_dir, f"{base_name}.java")
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(java_code)
+                    generated.add(base_name)
+
+            java_code = generate_java_class_from_schema(schema_name, schemas, package)
+            if java_code:
+                filepath = os.path.join(response_dir, f"{to_java_class_name(schema_name)}.java")
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(java_code)
+                generated.add(schema_name)
+
+        # Generate inline classes
+        for schema_name in sorted(deps):
+            inline_generated = generate_inline_classes(schema_name, schemas, package, response_dir)
+            generated.update(inline_generated)
+
+        print(f"      ✅ Generated {len(generated)} classes for response")
+
+        # Organize classes in response folder
+        organize_classes_in_folder(response_dir, to_java_class_name(response_schema), generated, schemas)
+        print(f"      📂 Organized into main class + related/")
+
+def generate_unused_schemas(schemas, output_dir, package):
+    """
+    Generate classes for schemas that are not used in any endpoint.
+    These are placed in a NO_ENDPOINT folder organized by inheritance.
+    """
+    # First, find all schemas already generated (used in endpoints)
+    used_schemas = set()
+    for root, dirs, files in os.walk(output_dir):
+        # Skip NO_ENDPOINT folder if it exists
+        if 'NO_ENDPOINT' in root:
+            continue
+        for filename in files:
+            if filename.endswith('.java'):
+                class_name = filename[:-5]  # Remove .java
+                used_schemas.add(class_name)
+
+    # Find schemas that should be generated but are not used
+    unused_schemas = []
+    for schema_name, schema in schemas.items():
+        # Skip array-only schemas
+        if schema.get('type') == 'array' and 'properties' not in schema and 'allOf' not in schema:
+            continue
+
+        class_name = to_java_class_name(schema_name)
+        if class_name not in used_schemas:
+            unused_schemas.append(schema_name)
+
+    if not unused_schemas:
+        print("   No unused schemas found")
+        return
+
+    print(f"   Found {len(unused_schemas)} unused schemas")
+
+    # Create NO_ENDPOINT folder
+    no_endpoint_dir = os.path.join(output_dir, 'NO_ENDPOINT')
+    os.makedirs(no_endpoint_dir, exist_ok=True)
+
+    # Generate classes for unused schemas
+    generated = set()
+    for schema_name in sorted(unused_schemas):
+        # Check for oneOf base class
+        oneof_field, oneof_types = has_oneof_field(schema_name, schemas)
+        if oneof_field and oneof_types:
+            base_name = to_java_class_name(oneof_field)
+            if base_name not in generated:
+                java_code = generate_base_class_for_oneof(base_name, package)
+                filepath = os.path.join(no_endpoint_dir, f"{base_name}.java")
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(java_code)
+                generated.add(base_name)
+
+        java_code = generate_java_class_from_schema(schema_name, schemas, package)
+        if java_code:
+            filepath = os.path.join(no_endpoint_dir, f"{to_java_class_name(schema_name)}.java")
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(java_code)
+            generated.add(schema_name)
+
+        # Generate inline classes for this schema
+        inline_generated = generate_inline_classes(schema_name, schemas, package, no_endpoint_dir)
+        generated.update(inline_generated)
+
+    print(f"   ✅ Generated {len(generated)} classes in NO_ENDPOINT/")
+
+    # Organize by inheritance
+    organize_no_endpoint_by_inheritance(no_endpoint_dir, schemas)
+    print(f"   📂 Organized by inheritance")
+
+def organize_no_endpoint_by_inheritance(no_endpoint_dir, schemas):
+    """
+    Organize NO_ENDPOINT folder by inheritance relationships.
+    """
+    import shutil
+
+    # Analyze all files in NO_ENDPOINT
+    class_info = {}
+    for filename in os.listdir(no_endpoint_dir):
+        if not filename.endswith('.java'):
+            continue
+
+        class_name = filename[:-5]
+        filepath = os.path.join(no_endpoint_dir, filename)
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Extract extends
+        extends_match = re.search(r'extends\s+(\w+)', content)
+        extends = extends_match.group(1) if extends_match else None
+
+        class_info[class_name] = {
+            'filename': filename,
+            'extends': extends,
+            'children': [],
+            'content': content
+        }
+
+    # Build children relationships
+    for class_name, info in class_info.items():
+        if info['extends'] and info['extends'] in class_info:
+            class_info[info['extends']]['children'].append(class_name)
+
+    def to_camel_case(name):
+        """Convert PascalCase to camelCase."""
+        if not name:
+            return name
+        return name[0].lower() + name[1:]
+
+    # Organize files: group by inheritance
+    processed = set()
+
+    # First, handle inheritance groups (base class + children)
+    for class_name, info in class_info.items():
+        if class_name in processed:
+            continue
+
+        # If this class has children, create a subfolder for the family
+        if info['children']:
+            family_dir = os.path.join(no_endpoint_dir, to_camel_case(class_name))
+            os.makedirs(family_dir, exist_ok=True)
+
+            # Move base class
+            src = os.path.join(no_endpoint_dir, info['filename'])
+            dest = os.path.join(family_dir, info['filename'])
+            if os.path.exists(src):
+                shutil.move(src, dest)
+            processed.add(class_name)
+
+            # Move children
+            for child_name in info['children']:
+                child_info = class_info[child_name]
+                src = os.path.join(no_endpoint_dir, child_info['filename'])
+                dest = os.path.join(family_dir, child_info['filename'])
+                if os.path.exists(src):
+                    shutil.move(src, dest)
+                processed.add(child_name)
+
+def main():
+    openapi_file = 'openapi.yaml'
+    output_dir = 'java'
+    package = 'com.java'
+
+    print("=== Generating Java classes from OpenAPI schema ===\n")
+
+    # Load OpenAPI
+    with open(openapi_file, 'r', encoding='utf-8') as f:
+        openapi_spec = yaml.safe_load(f)
+
+    schemas = openapi_spec.get('components', {}).get('schemas', {})
+    print(f"Loaded {len(schemas)} schemas from OpenAPI\n")
+
+    # Clear output directory
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    # Extract endpoints
+    paths = openapi_spec.get('paths', {})
+    responses_comp = openapi_spec.get('components', {}).get('responses', {})
+
+    endpoint_count = 0
     for path, path_item in paths.items():
         for method, operation in path_item.items():
             if method not in ['get', 'post', 'put', 'patch', 'delete']:
@@ -956,7 +954,7 @@ def organize_classes_by_domain(output_dir, base_package):
             endpoint_parts = [p for p in path.split('/') if p and not p.startswith('{')]
             endpoint_name = f"{method.upper()}_{'_'.join(endpoint_parts)}" if endpoint_parts else f"{method.upper()}_root"
 
-            # Extract request body schema
+            # Extract request schema
             request_schema = None
             request_body = operation.get('requestBody', {})
             if request_body:
@@ -964,13 +962,11 @@ def organize_classes_by_domain(output_dir, base_package):
                 json_content = content.get('application/json', {})
                 schema = json_content.get('schema', {})
                 if '$ref' in schema:
-                    request_schema = to_java_class_name(schema['$ref'].split('/')[-1])
+                    request_schema = schema['$ref'].split('/')[-1]
 
             # Extract response schemas
             response_schemas = []
             responses = operation.get('responses', {})
-            responses_comp = openapi_spec.get('components', {}).get('responses', {})
-
             for status_code, response in responses.items():
                 if status_code.startswith('2'):
                     if '$ref' in response:
@@ -980,291 +976,26 @@ def organize_classes_by_domain(output_dir, base_package):
                             json_content = resp_content.get('application/json', {})
                             schema = json_content.get('schema', {})
                             if '$ref' in schema:
-                                response_schemas.append(to_java_class_name(schema['$ref'].split('/')[-1]))
+                                response_schemas.append(schema['$ref'].split('/')[-1])
                     else:
                         resp_content = response.get('content', {})
                         json_content = resp_content.get('application/json', {})
                         schema = json_content.get('schema', {})
                         if '$ref' in schema:
-                            response_schemas.append(to_java_class_name(schema['$ref'].split('/')[-1]))
+                            response_schemas.append(schema['$ref'].split('/')[-1])
 
-            endpoints_data.append({
-                'name': endpoint_name,
-                'request': request_schema,
-                'responses': response_schemas
-            })
+            # Process endpoint
+            if request_schema or response_schemas:
+                process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package)
+                endpoint_count += 1
 
-    print(f"  Found {len(endpoints_data)} endpoints")
+    print(f"\n✅ Processed {endpoint_count} endpoints")
+    print(f"   Generated classes in: {output_dir}/")
 
-    # Collect all files to back up
-    temp_files = {}
-    for filename in os.listdir(output_dir):
-        if filename.endswith('.java'):
-            src = os.path.join(output_dir, filename)
-            with open(src, 'r', encoding='utf-8') as f:
-                temp_files[filename] = f.read()
-
-    # Also check subdirectories
-    for root, dirs, files in os.walk(output_dir):
-        for filename in files:
-            if filename.endswith('.java'):
-                filepath = os.path.join(root, filename)
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    temp_files[filename] = f.read()
-
-    # Clear output directory
-    import shutil
-    for item in os.listdir(output_dir):
-        item_path = os.path.join(output_dir, item)
-        if os.path.isdir(item_path):
-            shutil.rmtree(item_path)
-        elif item.endswith('.java'):
-            os.remove(item_path)
-
-    # Helper: write dependencies into related grouped by inheritance
-    def write_related_grouped(related_dir: str, dep_classes: set):
-        os.makedirs(related_dir, exist_ok=True)
-        written = set()
-
-        # Build groups: base -> set(children)
-        groups = {}
-        for cls in dep_classes:
-            if cls not in class_info:
-                continue
-            base = class_info[cls]['extends']
-            if base:
-                groups.setdefault(base, set()).add(cls)
-
-        # Create subfolders for bases that have at least one child in deps
-        for base, children in groups.items():
-            subdir = os.path.join(related_dir, to_camel_case_folder(base))
-            os.makedirs(subdir, exist_ok=True)
-            # Write base itself (if available)
-            if base in class_info:
-                base_file = class_info[base]['file']
-                if base_file in temp_files:
-                    with open(os.path.join(subdir, base_file), 'w', encoding='utf-8') as f:
-                        f.write(temp_files[base_file])
-                    written.add(base)
-            # Write children
-            for child in sorted(children):
-                child_file = class_info[child]['file']
-                if child_file in temp_files:
-                    with open(os.path.join(subdir, child_file), 'w', encoding='utf-8') as f:
-                        f.write(temp_files[child_file])
-                    written.add(child)
-
-        # Write remaining classes (no inheritance grouping) into related root
-        for cls in sorted(dep_classes):
-            if cls in written or cls not in class_info:
-                continue
-            file = class_info[cls]['file']
-            if file in temp_files:
-                with open(os.path.join(related_dir, file), 'w', encoding='utf-8') as f:
-                    f.write(temp_files[file])
-                written.add(cls)
-
-        return len(written)
-
-    # Organize files by endpoint
-    total_files = 0
-
-    for endpoint in endpoints_data:
-        endpoint_dir = os.path.join(output_dir, endpoint['name'])
-
-        # Process request body
-        if endpoint['request'] and endpoint['request'] in class_info:
-            body_dir = os.path.join(endpoint_dir, 'body')
-            # Asegurarse de que endpoint_dir sea una cadena antes de usar os.path.join
-            endpoint_dir = str(endpoint_dir)
-            body_dir = os.path.join(endpoint_dir, 'body')
-            os.makedirs(body_dir, exist_ok=True)
-
-            # Save main class
-            main_class = endpoint['request']
-            main_file = class_info[main_class]['file']
-            if main_file in temp_files:
-                dest = os.path.join(body_dir, main_file)
-                with open(dest, 'w', encoding='utf-8') as f:
-                    f.write(temp_files[main_file])
-                total_files += 1
-            else:
-                print(f"⚠️  File '{main_file}' for class '{main_class}' not found.")
-
-            # Get all dependencies including bases and children
-            all_deps = get_all_dependencies(main_class)
-            all_deps.discard(main_class)
-
-            if all_deps:
-                related_dir = os.path.join(body_dir, 'related')
-                total_files += write_related_grouped(related_dir, all_deps)
-
-        # Process responses
-        for response_class in endpoint['responses']:
-            if response_class not in class_info:
-                continue
-
-            response_dir = os.path.join(str(endpoint_dir), 'response')
-            os.makedirs(response_dir, exist_ok=True)
-
-            # Save main response class
-            main_file = class_info[response_class]['file']
-            if main_file in temp_files:
-                dest = os.path.join(str(response_dir), main_file)
-                with open(dest, 'w', encoding='utf-8') as f:
-                    f.write(temp_files[main_file])
-                total_files += 1
-
-            # Get all dependencies including bases and children
-            all_deps = get_all_dependencies(response_class)
-            all_deps.discard(response_class)
-
-            if all_deps:
-                related_dir = os.path.join(str(response_dir), 'related')
-                total_files += write_related_grouped(str(related_dir), all_deps)
-
-    print(f"✅ Organized {total_files} files into {len(endpoints_data)} endpoint folders")
-    print(f"   Structure: endpoint/body|response/related/ (grouped by inheritance)\n")
-
-
-def fix_imports_after_organization(output_dir, base_package, class_info):
-    """Fix imports in all organized Java files."""
-    print("Pass 4.5: Fixing imports in organized classes...\n")
-
-    # Build map of class name -> package
-    class_packages = {}
-    for root, dirs, files in os.walk(output_dir):
-        for filename in files:
-            if not filename.endswith('.java'):
-                continue
-
-            class_name = filename[:-5]
-            rel_path = os.path.relpath(root, output_dir)
-
-            if rel_path == '.':
-                class_packages[class_name] = base_package
-            else:
-                package_suffix = rel_path.replace(os.sep, '.')
-                class_packages[class_name] = f"{base_package}.{package_suffix}"
-
-    # Fix imports in each file
-    fixed_count = 0
-    for root, dirs, files in os.walk(output_dir):
-        for filename in files:
-            if not filename.endswith('.java'):
-                continue
-
-            filepath = os.path.join(root, filename)
-
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            # Get current package
-            package_match = re.search(r'package\s+([\w.]+);', content)
-            if not package_match:
-                continue
-
-            current_package = package_match.group(1)
-
-            # Get referenced classes from class_info if available
-            class_name = filename[:-5]
-            if class_name in class_info:
-                references = set(class_info[class_name]['references'])
-                if class_info[class_name]['extends']:
-                    references.add(class_info[class_name]['extends'])
-            else:
-                continue
-
-            # Build necessary imports
-            necessary_imports = set()
-            for ref_class in references:
-                if ref_class in class_packages:
-                    ref_package = class_packages[ref_class]
-                    # Only import if from different package
-                    if ref_package != current_package:
-                        necessary_imports.add(f'import {ref_package}.{ref_class};')
-
-            if not necessary_imports:
-                continue
-
-            # Remove existing imports and add new ones
-            lines = content.split('\n')
-
-            # Find package line
-            package_line_idx = None
-            for i, line in enumerate(lines):
-                if line.strip().startswith('package '):
-                    package_line_idx = i
-                    break
-
-            if package_line_idx is None:
-                continue
-
-            # Find first annotation or class declaration
-            first_code_idx = None
-            for i in range(package_line_idx + 1, len(lines)):
-                stripped = lines[i].strip()
-                if stripped and not stripped.startswith('import '):
-                    first_code_idx = i
-                    break
-
-            if first_code_idx is None:
-                continue
-
-            # Rebuild file
-            new_lines = []
-            new_lines.extend(lines[:package_line_idx + 1])
-            new_lines.append('')
-
-            # Add necessary imports (sorted)
-            for imp in sorted(necessary_imports):
-                new_lines.append(imp)
-            new_lines.append('')
-
-            # Add rest of the file
-            new_lines.extend(lines[first_code_idx:])
-
-            # Write back
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(new_lines))
-
-            fixed_count += 1
-
-    print(f"✅ Fixed imports in {fixed_count} files\n")
-
+    # Generate unused schemas in NO_ENDPOINT folder
+    print(f"\n📦 Processing unused schemas...")
+    generate_unused_schemas(schemas, output_dir, package)
 
 if __name__ == '__main__':
-    examples_directory = 'examples'
-    output_directory = 'java'
-    package_name = 'com.java'
+    main()
 
-    print("=== JSON to Java Class Generator ===\n")
-
-    has_quicktype = check_quicktype_installed()
-
-    if not has_quicktype:
-        print("❌ quicktype is not installed.")
-        print("\nInstallation options:")
-        print("  Option 1 (npm):  npm install -g quicktype")
-        print("  Option 2 (yarn): yarn global add quicktype")
-        print("  Option 3 (brew): brew install quicktype")
-        print("\nFalling back to manual generation (basic support)...\n")
-        convert_manually(examples_directory, output_directory, package_name)
-    else:
-        print("Select conversion method:")
-        print("1. Use quicktype - individual files")
-        print("2. Use quicktype - all files together (recommended)")
-        print("3. Manual generation (basic, no quicktype)")
-
-        choice = input("\nEnter choice (1, 2, or 3) [default: 2]: ").strip() or "2"
-
-        if choice == "1":
-            convert_json_to_java(examples_directory, output_directory)
-        elif choice == "3":
-            convert_manually(examples_directory, output_directory, package_name)
-        else:
-            convert_all_to_single_package(examples_directory, output_directory)
-
-    print("\n✅ Java class generation complete!")
-    print(f"   Output directory: {output_directory}")
-    print(f"   Package: {package_name}")

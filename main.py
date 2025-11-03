@@ -19,13 +19,13 @@ def main():
             print(f"🗑️ Deleting folder: {folder}")
             shutil.rmtree(folder)
 
-    # Generate examples
-    print("🚀 Generating examples...")
-    subprocess.run(["python", "generate_json_examples.py"], check=True)
+    # Generate examples (optional, for reference)
+    print("🚀 Generating JSON examples...")
+    subprocess.run(["python3", "generate_json_examples.py"], check=True)
 
-    # Generate Java classes
-    print("🚀 Generating Java classes...")
-    subprocess.run(["python", "generate_java_classes.py"], check=True)
+    # Generate Java classes directly from OpenAPI schema
+    print("🚀 Generating Java classes from OpenAPI schema...")
+    subprocess.run(["python3", "generate_java_classes.py"], check=True)
 
     print("✅ Process complete!")
 

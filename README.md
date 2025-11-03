@@ -27,6 +27,7 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ✅ **Full Reference Resolution** - Handles `$ref`, `allOf`, `oneOf`, `anyOf`  
 ✅ **Type Safety** - Proper generic types for Lists and nested objects  
 ✅ **No Import Changes** - All packages remain as `com.java`  
+✅ **No Class Imports** - Generated classes don't import other generated classes (only java.util, java.time, and Lombok)  
 
 ## Prerequisites
 
@@ -46,18 +47,6 @@ The `openapi.yaml` file should contain:
 ```bash
 # Install PyYAML for YAML file parsing
 pip install pyyaml
-
-# Or with pip3
-pip3 install pyyaml
-
-# Or for specific Python version
-python3.14 -m pip install pyyaml
-```
-
-
-```bash
-# quicktype for advanced generation 
-npm install -g quicktype
 ```
 ## Quick Start
 
