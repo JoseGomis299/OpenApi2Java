@@ -85,16 +85,70 @@ def to_java_field_name(name):
         return name
     return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:] if word)
 
-def generate_field_javadoc(description, is_required, oneof_types=None):
-    """Generate JavaDoc for a field."""
-    # Always generate JavaDoc if there's any information
-    if not description and not is_required and not oneof_types:
+def generate_field_javadoc(description, is_required, oneof_types=None, schema=None, schemas=None):
+    """Generate JavaDoc for a field including all OpenAPI and JSON Schema attributes."""
+    # Merge schema attributes from allOf references if present
+    merged_schema = {}
+    if schema:
+        merged_schema = schema.copy()
+
+        # If schema has allOf, merge attributes from referenced schemas
+        if 'allOf' in schema:
+            for item in schema['allOf']:
+                if isinstance(item, dict):
+                    # If it's a reference, get the referenced schema
+                    if '$ref' in item and schemas:
+                        ref_name = item['$ref'].split('/')[-1]
+                        if ref_name in schemas:
+                            ref_schema = schemas[ref_name]
+                            # Merge attributes (but don't override existing ones)
+                            for key, value in ref_schema.items():
+                                if key not in merged_schema and key != 'properties':
+                                    merged_schema[key] = value
+                    # Also merge inline attributes
+                    for key, value in item.items():
+                        if key not in merged_schema and key != '$ref':
+                            merged_schema[key] = value
+
+    # Check if we have any content to document
+    has_content = description or is_required or oneof_types
+    if merged_schema:
+        # Check if schema has any additional attributes
+        attribute_keys = [
+            # Common metadata
+            'title', 'description', 'default', 'example', 'examples', 'deprecated',
+            # Format and nullable
+            'format', 'nullable',
+            # Numeric constraints
+            'multipleOf', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
+            # String constraints
+            'minLength', 'maxLength', 'pattern',
+            # Array constraints
+            'minItems', 'maxItems', 'uniqueItems',
+            # Object constraints
+            'minProperties', 'maxProperties',
+            # Enum/const
+            'enum', 'const',
+            # Read/Write
+            'readOnly', 'writeOnly',
+            # Composition
+            'allOf', 'oneOf', 'anyOf', 'not',
+            # Discriminator
+            'discriminator',
+            # External docs
+            'externalDocs',
+            # XML
+            'xml'
+        ]
+        has_content = has_content or any(k in merged_schema for k in attribute_keys)
+
+    if not has_content:
         return ""
 
     javadoc_lines = ["    /**"]
 
+    # Description
     if description:
-        # Split description into lines if too long
         desc = description.strip()
         if len(desc) > 80:
             words = desc.split()
@@ -110,12 +164,201 @@ def generate_field_javadoc(description, is_required, oneof_types=None):
         else:
             javadoc_lines.append(f"     * {desc}")
 
+    # OneOf types
     if oneof_types:
         types_list = ', '.join(oneof_types)
         if not description:
             javadoc_lines.append("     *")
         javadoc_lines.append(f"     * Can be one of: {types_list}")
 
+    # Process merged schema attributes if available
+    if merged_schema:
+        added_blank_line = description or oneof_types
+
+        # Title (if different from description)
+        if 'title' in merged_schema and merged_schema.get('title') != description:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @title {merged_schema['title']}")
+
+        # Deprecated
+        if merged_schema.get('deprecated'):
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append("     * @deprecated This field is deprecated")
+
+        # Read-only / Write-only
+        if merged_schema.get('readOnly'):
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append("     * @readOnly This field is read-only")
+
+        if merged_schema.get('writeOnly'):
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append("     * @writeOnly This field is write-only")
+
+        # Nullable
+        if merged_schema.get('nullable'):
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append("     * @nullable This field can be null")
+
+        # Format (but not type - removed as requested)
+        if 'format' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @format {merged_schema['format']}")
+
+        # Numeric constraints
+        if 'multipleOf' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @multipleOf {merged_schema['multipleOf']}")
+
+        if 'minimum' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @minimum {merged_schema['minimum']}")
+
+        if 'maximum' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @maximum {merged_schema['maximum']}")
+
+        if 'exclusiveMinimum' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @exclusiveMinimum {merged_schema['exclusiveMinimum']}")
+
+        if 'exclusiveMaximum' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @exclusiveMaximum {merged_schema['exclusiveMaximum']}")
+
+        # String constraints
+        if 'minLength' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @minLength {merged_schema['minLength']}")
+
+        if 'maxLength' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @maxLength {merged_schema['maxLength']}")
+
+        if 'pattern' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @pattern {merged_schema['pattern']}")
+
+        # Array constraints
+        if 'minItems' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @minItems {merged_schema['minItems']}")
+
+        if 'maxItems' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @maxItems {merged_schema['maxItems']}")
+
+        if merged_schema.get('uniqueItems'):
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append("     * @uniqueItems Items must be unique")
+
+        # Object constraints
+        if 'minProperties' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @minProperties {merged_schema['minProperties']}")
+
+        if 'maxProperties' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @maxProperties {merged_schema['maxProperties']}")
+
+        # Enum values
+        if 'enum' in merged_schema and merged_schema['enum']:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            enum_values = ', '.join(str(v) for v in merged_schema['enum'])
+            javadoc_lines.append(f"     * @enum {enum_values}")
+
+        # Const value
+        if 'const' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @const {merged_schema['const']}")
+
+        # Default value
+        if 'default' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @default {merged_schema['default']}")
+
+        # Example value(s)
+        if 'example' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            javadoc_lines.append(f"     * @example {merged_schema['example']}")
+
+        if 'examples' in merged_schema and merged_schema['examples']:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            examples_str = ', '.join(str(v) for v in merged_schema['examples'][:3])  # Limit to 3 examples
+            javadoc_lines.append(f"     * @examples {examples_str}")
+
+        # Discriminator (for polymorphism)
+        if 'discriminator' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            discriminator = merged_schema['discriminator']
+            if isinstance(discriminator, dict) and 'propertyName' in discriminator:
+                javadoc_lines.append(f"     * @discriminator {discriminator['propertyName']}")
+            else:
+                javadoc_lines.append(f"     * @discriminator {discriminator}")
+
+        # External documentation
+        if 'externalDocs' in merged_schema:
+            if not added_blank_line:
+                javadoc_lines.append("     *")
+                added_blank_line = True
+            ext_docs = merged_schema['externalDocs']
+            if isinstance(ext_docs, dict):
+                if 'url' in ext_docs:
+                    desc = ext_docs.get('description', 'External documentation')
+                    javadoc_lines.append(f"     * @see {desc}: {ext_docs['url']}")
+            else:
+                javadoc_lines.append(f"     * @see {ext_docs}")
+
+    # Required (always last)
     if is_required:
         javadoc_lines.append("     * @required This field is required")
 
@@ -464,7 +707,7 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
 
             # Generate JavaDoc for oneOf field if enabled
             if enable_javadoc:
-                javadoc = generate_field_javadoc(field_description, is_required, types_list)
+                javadoc = generate_field_javadoc(field_description, is_required, types_list, prop_schema, schemas)
                 if javadoc:
                     fields.append(javadoc)
 
@@ -481,8 +724,8 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
                     referenced_classes.add(type_class)
 
             # Generate JavaDoc for regular field if enabled
-            if enable_javadoc and (field_description or is_required):
-                javadoc = generate_field_javadoc(field_description, is_required)
+            if enable_javadoc:
+                javadoc = generate_field_javadoc(field_description, is_required, None, prop_schema, schemas)
                 if javadoc:
                     fields.append(javadoc)
 
@@ -820,8 +1063,8 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
             imports.add("import java.time.LocalDate;")
 
         # Generate JavaDoc for field if enabled
-        if enable_javadoc and (field_description or is_required):
-            javadoc = generate_field_javadoc(field_description, is_required)
+        if enable_javadoc:
+            javadoc = generate_field_javadoc(field_description, is_required, None, prop_schema, schemas)
             if javadoc:
                 fields.append(javadoc)
 
