@@ -320,8 +320,19 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
     fields = []
     referenced_classes = set()
 
+    # Get required fields list from schema
+    required_fields = schema.get('required', [])
+    # Also check in allOf items
+    if 'allOf' in schema:
+        for item in schema['allOf']:
+            if isinstance(item, dict) and 'required' in item:
+                required_fields.extend(item['required'])
+
     for prop_name, prop_schema in own_props.items():
         java_field = to_java_field_name(prop_name)
+
+        # Check if this field is required
+        is_required = prop_name in required_fields
 
         # Check if this is the oneOf field
         if oneof_field_name and prop_name == oneof_field_name:
@@ -348,7 +359,11 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         if "LocalDate" in java_type:
             imports.add("import java.time.LocalDate;")
 
-        fields.append(f"    private {java_type} {java_field};")
+        # Add required indicator comment if field is required
+        if is_required:
+            fields.append(f"    private {java_type} {java_field}; // Required")
+        else:
+            fields.append(f"    private {java_type} {java_field};")
 
     # Add base class to referenced classes if exists
     if base_class_name:
@@ -629,9 +644,15 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
 
     properties = inline_schema.get('properties', {})
 
+    # Get required fields list from inline schema
+    required_fields = inline_schema.get('required', [])
+
     for prop_name, prop_schema in properties.items():
         java_field = to_java_field_name(prop_name)
         java_type = get_java_type_from_openapi(prop_schema, schemas, field_name=prop_name)
+
+        # Check if this field is required
+        is_required = prop_name in required_fields
 
         # Extract class names from type
         type_classes = re.findall(r'\b([A-Z][a-zA-Z0-9]*)\b', java_type)
@@ -647,7 +668,11 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         if "LocalDate" in java_type:
             imports.add("import java.time.LocalDate;")
 
-        fields.append(f"    private {java_type} {java_field};")
+        # Add required indicator comment if field is required
+        if is_required:
+            fields.append(f"    private {java_type} {java_field}; // Required")
+        else:
+            fields.append(f"    private {java_type} {java_field};")
 
     # Don't add imports for referenced classes - commented out
     # for ref_class in sorted(referenced_classes):

@@ -26,8 +26,7 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ✅ **Clean Code** - No JSON annotations, pure Lombok POJOs  
 ✅ **Full Reference Resolution** - Handles `$ref`, `allOf`, `oneOf`, `anyOf`  
 ✅ **Type Safety** - Proper generic types for Lists and nested objects  
-✅ **No Import Changes** - All packages remain as `com.java`  
-✅ **No Class Imports** - Generated classes don't import other generated classes (only java.util, java.time, and Lombok)  
+✅ **Required Field Indicators** - Fields marked as required in OpenAPI are annotated with `// Required` comments  
 
 ## Prerequisites
 
@@ -201,12 +200,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Owner {
-    private String firstName;
-    private String lastName;
+    private String firstName; // Required
+    private String lastName; // Required
     private Address address;
     private List<ContactMethod> contactMethods;
 }
 ```
+
+**Note:** Fields marked as `required` in the OpenAPI schema include a `// Required` comment.
 
 ### Base Class
 ```java
@@ -330,6 +331,43 @@ Payment<BankAccountInfo> bankPayment = Payment.<BankAccountInfo>builder()
     .build();
 ```
 
+### Required Fields
+
+Fields marked as `required` in the OpenAPI schema are automatically annotated with a `// Required` comment in the generated Java classes. This helps developers quickly identify mandatory fields.
+
+**OpenAPI schema example:**
+```yaml
+MessageDetail:
+  required:
+    - name
+    - messageText
+  type: object
+  properties:
+    name:
+      type: string
+    messageText:
+      type: string
+    contact:
+      $ref: "#/components/schemas/MessageContact"
+```
+
+**Generated Java class:**
+```java
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class MessageDetail {
+    private String name; // Required
+    private MessageContact contact;
+    private String messageText; // Required
+}
+```
+
+**Note:** The `// Required` comment only appears for fields that are explicitly listed in the `required` array of the OpenAPI schema. This includes:
+- Direct required fields in the schema
+- Required fields defined within `allOf` blocks
+
 ## How It Works
 
 ### JSON Generation (`generate_json_examples.py`)
@@ -348,11 +386,12 @@ Payment<BankAccountInfo> bankPayment = Payment.<BankAccountInfo>builder()
 
 ### Java Generation (`generate_java_classes.py`)
 
-**Three-pass generation:**
+**Four-pass generation:**
 
 1. **Pass 1: Analyze OpenAPI**
    - Load inheritance from `allOf` patterns
    - Detect `oneOf` fields for polymorphic type handling
+   - Extract required fields from schema definitions
    - Build schema relationship map
    - No naming conventions required
 
@@ -360,12 +399,19 @@ Payment<BankAccountInfo> bankPayment = Payment.<BankAccountInfo>builder()
    - Create all top-level classes
    - Extract nested objects to separate files
    - Apply generic `Object` type to `oneOf` fields with type comments
+   - Add `// Required` comments to mandatory fields
    - Maintain type references
 
 3. **Pass 3: Apply Inheritance**
    - Regenerate classes with base classes
    - Add `@EqualsAndHashCode(callSuper = true)`
    - Filter inherited fields
+   - Preserve required field indicators
+
+4. **Pass 4: Organize by Domain**
+   - Group classes into endpoint folders (body/response)
+   - Create related/ subfolders for dependencies
+   - Further organize by inheritance hierarchies
 
 ## Configuration
 
