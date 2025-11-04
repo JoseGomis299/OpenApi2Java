@@ -28,6 +28,69 @@ def to_java_field_name(name):
         return name
     return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:] if word)
 
+def generate_field_javadoc(description, is_required, oneof_types=None):
+    """Generate JavaDoc for a field."""
+    # Always generate JavaDoc if there's any information
+    if not description and not is_required and not oneof_types:
+        return ""
+
+    javadoc_lines = ["    /**"]
+
+    if description:
+        # Split description into lines if too long
+        desc = description.strip()
+        if len(desc) > 80:
+            words = desc.split()
+            line = "     * "
+            for word in words:
+                if len(line) + len(word) + 1 > 100:
+                    javadoc_lines.append(line)
+                    line = "     * " + word
+                else:
+                    line += (" " if line != "     * " else "") + word
+            if line != "     * ":
+                javadoc_lines.append(line)
+        else:
+            javadoc_lines.append(f"     * {desc}")
+
+    if oneof_types:
+        types_list = ', '.join(oneof_types)
+        if not description:
+            javadoc_lines.append("     *")
+        javadoc_lines.append(f"     * Can be one of: {types_list}")
+
+    if is_required:
+        javadoc_lines.append("     * @required This field is required")
+
+    javadoc_lines.append("     */")
+    return "\n".join(javadoc_lines)
+
+def generate_class_javadoc(description):
+    """Generate JavaDoc for a class."""
+    if not description:
+        return ""
+
+    javadoc_lines = ["/**"]
+
+    # Split description into lines if too long
+    desc = description.strip()
+    if len(desc) > 80:
+        words = desc.split()
+        line = " * "
+        for word in words:
+            if len(line) + len(word) + 1 > 100:
+                javadoc_lines.append(line)
+                line = " * " + word
+            else:
+                line += (" " if line != " * " else "") + word
+        if line != " * ":
+            javadoc_lines.append(line)
+    else:
+        javadoc_lines.append(f" * {desc}")
+
+    javadoc_lines.append(" */")
+    return "\n".join(javadoc_lines)
+
 def get_java_type_from_openapi(schema, schemas, visited=None, field_name=None):
     """Get Java type from OpenAPI schema definition."""
     if visited is None:
@@ -334,11 +397,19 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         # Check if this field is required
         is_required = prop_name in required_fields
 
+        # Get field description
+        field_description = prop_schema.get('description', '')
+
         # Check if this is the oneOf field
         if oneof_field_name and prop_name == oneof_field_name:
             java_type = f"T{to_java_class_name(prop_name)}"
             types_list = [to_java_class_name(t.get('$ref', '').split('/')[-1]) for t in oneof_types if '$ref' in t]
-            fields.append(f"    // Can be one of: {', '.join(types_list)}")
+
+            # Generate JavaDoc for oneOf field (always generate for oneOf)
+            javadoc = generate_field_javadoc(field_description, is_required, types_list)
+            if javadoc:
+                fields.append(javadoc)
+
             # Add base class to referenced classes
             referenced_classes.add(to_java_class_name(prop_name))
         else:
@@ -351,6 +422,12 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
                 if type_class not in ['String', 'Integer', 'Long', 'Double', 'Boolean', 'LocalDate', 'LocalDateTime', 'Object', 'List']:
                     referenced_classes.add(type_class)
 
+            # Generate JavaDoc for regular field (always generate if there's description or required)
+            if field_description or is_required:
+                javadoc = generate_field_javadoc(field_description, is_required)
+                if javadoc:
+                    fields.append(javadoc)
+
         # Add necessary imports
         if "List" in java_type:
             imports.add("import java.util.List;")
@@ -359,11 +436,8 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         if "LocalDate" in java_type:
             imports.add("import java.time.LocalDate;")
 
-        # Add required indicator comment if field is required
-        if is_required:
-            fields.append(f"    private {java_type} {java_field}; // Required")
-        else:
-            fields.append(f"    private {java_type} {java_field};")
+        # Add field declaration
+        fields.append(f"    private {java_type} {java_field};")
 
     # Add base class to referenced classes if exists
     if base_class_name:
@@ -376,6 +450,15 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
     # Build class
     java_code = f"package {package};\n\n"
     java_code += "\n".join(sorted(imports)) + "\n\n"
+
+    # Always add class JavaDoc
+    class_description = schema.get('description', '')
+    if not class_description:
+        class_description = f"{class_name} class."
+    class_javadoc = generate_class_javadoc(class_description)
+    if class_javadoc:
+        java_code += class_javadoc + "\n"
+
     java_code += "@Data\n"
 
     if base_class_name:
@@ -415,12 +498,14 @@ def generate_base_class_for_oneof(base_name, package):
     java_code += "import lombok.Data;\n"
     java_code += "import lombok.NoArgsConstructor;\n"
     java_code += "import lombok.AllArgsConstructor;\n\n"
+    java_code += "/**\n"
+    java_code += " * Polymorphic base class for oneOf types.\n"
+    java_code += " * All concrete implementations will extend this class.\n"
+    java_code += " */\n"
     java_code += "@Data\n"
     java_code += "@NoArgsConstructor\n"
     java_code += "@AllArgsConstructor\n"
     java_code += f"public abstract class {base_name} {{\n"
-    java_code += "    // Polymorphic base class for oneOf types\n"
-    java_code += "    // All concrete implementations will extend this class\n"
     java_code += "}\n"
     return java_code
 
@@ -654,6 +739,9 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         # Check if this field is required
         is_required = prop_name in required_fields
 
+        # Get field description
+        field_description = prop_schema.get('description', '')
+
         # Extract class names from type
         type_classes = re.findall(r'\b([A-Z][a-zA-Z0-9]*)\b', java_type)
         for type_class in type_classes:
@@ -668,11 +756,14 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         if "LocalDate" in java_type:
             imports.add("import java.time.LocalDate;")
 
-        # Add required indicator comment if field is required
-        if is_required:
-            fields.append(f"    private {java_type} {java_field}; // Required")
-        else:
-            fields.append(f"    private {java_type} {java_field};")
+        # Generate JavaDoc for field (always generate if there's description or required)
+        if field_description or is_required:
+            javadoc = generate_field_javadoc(field_description, is_required)
+            if javadoc:
+                fields.append(javadoc)
+
+        # Add field declaration
+        fields.append(f"    private {java_type} {java_field};")
 
     # Don't add imports for referenced classes - commented out
     # for ref_class in sorted(referenced_classes):
@@ -681,6 +772,15 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
     # Build class
     java_code = f"package {package};\n\n"
     java_code += "\n".join(sorted(imports)) + "\n\n"
+
+    # Always add class JavaDoc
+    class_description = inline_schema.get('description', '')
+    if not class_description:
+        class_description = f"{class_name} class."
+    class_javadoc = generate_class_javadoc(class_description)
+    if class_javadoc:
+        java_code += class_javadoc + "\n"
+
     java_code += "@Data\n"
 
     if base_class:

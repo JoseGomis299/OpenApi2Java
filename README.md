@@ -26,7 +26,8 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ✅ **Clean Code** - No JSON annotations, pure Lombok POJOs  
 ✅ **Full Reference Resolution** - Handles `$ref`, `allOf`, `oneOf`, `anyOf`  
 ✅ **Type Safety** - Proper generic types for Lists and nested objects  
-✅ **Required Field Indicators** - Fields marked as required in OpenAPI are annotated with `// Required` comments  
+✅ **JavaDoc Documentation** - Classes and fields include JavaDoc with descriptions from OpenAPI schema  
+✅ **Required Field Indicators** - Fields marked as required in OpenAPI include `@required` tag in JavaDoc  
 
 ## Prerequisites
 
@@ -195,19 +196,38 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Owner information.
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class Owner {
-    private String firstName; // Required
-    private String lastName; // Required
+    /**
+     * First name of the owner.
+     *
+     * @required This field is required
+     */
+    private String firstName;
+    /**
+     * Last name of the owner.
+     *
+     * @required This field is required
+     */
+    private String lastName;
+    /**
+     * Owner's address.
+     */
     private Address address;
+    /**
+     * List of contact methods.
+     */
     private List<ContactMethod> contactMethods;
 }
 ```
 
-**Note:** Fields marked as `required` in the OpenAPI schema include a `// Required` comment.
+**Note:** Fields and classes include JavaDoc documentation extracted from the OpenAPI schema descriptions. Fields marked as `required` include the `@required` tag in their JavaDoc.
 
 ### Base Class
 ```java
@@ -331,13 +351,14 @@ Payment<BankAccountInfo> bankPayment = Payment.<BankAccountInfo>builder()
     .build();
 ```
 
-### Required Fields
+### Required Fields and JavaDoc
 
-Fields marked as `required` in the OpenAPI schema are automatically annotated with a `// Required` comment in the generated Java classes. This helps developers quickly identify mandatory fields.
+All generated classes include JavaDoc documentation. Fields with descriptions in the OpenAPI schema include field-level JavaDoc. Fields marked as `required` in the OpenAPI schema are automatically annotated with the `@required` tag in their JavaDoc. This provides clear, professional documentation while maintaining type safety.
 
 **OpenAPI schema example:**
 ```yaml
 MessageDetail:
+  description: Object that encapsulates the information of the message related to a proceed.
   required:
     - name
     - messageText
@@ -345,28 +366,54 @@ MessageDetail:
   properties:
     name:
       type: string
+      description: Full name of sender.
     messageText:
       type: string
+      description: Text of the message.
     contact:
       $ref: "#/components/schemas/MessageContact"
+    address:
+      $ref: "#/components/schemas/MessageAddress"
 ```
 
 **Generated Java class:**
 ```java
+/**
+ * Object that encapsulates the information of the message related to a proceed.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class MessageDetail {
-    private String name; // Required
+    /**
+     * Full name of sender.
+     * @required This field is required
+     */
+    private String name;
     private MessageContact contact;
-    private String messageText; // Required
+    private MessageAddress address;
+    /**
+     * Text of the message.
+     * @required This field is required
+     */
+    private String messageText;
 }
 ```
 
-**Note:** The `// Required` comment only appears for fields that are explicitly listed in the `required` array of the OpenAPI schema. This includes:
-- Direct required fields in the schema
-- Required fields defined within `allOf` blocks
+**Features:**
+- **Class-level JavaDoc**: Generated from the schema's `description` field
+- **Field-level JavaDoc**: Generated from each property's `description` field (only if description exists or field is required)
+- **@required tag**: Automatically added to required fields' JavaDoc
+- **OneOf documentation**: Polymorphic fields include "Can be one of: ..." in their JavaDoc
+- **Long descriptions**: Automatically wrapped at 100 characters for readability
+- **Clean formatting**: No unnecessary blank lines in JavaDoc
+
+**Note:** 
+- JavaDoc is only generated for fields that have a description in the OpenAPI schema OR are marked as required
+- Fields without description and not required will not have JavaDoc
+- The `@required` tag only appears for fields explicitly listed in the `required` array of the OpenAPI schema
+- This includes direct required fields and required fields defined within `allOf` blocks
 
 ## How It Works
 
