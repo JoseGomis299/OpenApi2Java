@@ -250,5 +250,6 @@ def process_schema(schema_name, schemas, endpoint_dir, folder_name):
 
 
 if __name__ == '__main__':
-    extract_and_save_schema_examples('openapi.yaml', 'examples')
+    from config import OPENAPI_FILE, EXAMPLES_FOLDER
+    extract_and_save_schema_examples(OPENAPI_FILE, EXAMPLES_FOLDER)
 

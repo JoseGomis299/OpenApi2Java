@@ -26,6 +26,7 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ✅ **Clean Code** - No JSON annotations, pure Lombok POJOs  
 ✅ **Full Reference Resolution** - Handles `$ref`, `allOf`, `oneOf`, `anyOf`  
 ✅ **Type Safety** - Proper generic types for Lists and nested objects  
+✅ **Configurable** - All paths and package names configurable via `config.yaml`  
 ✅ **JavaDoc Documentation** - Classes and fields include JavaDoc with descriptions from OpenAPI schema  
 ✅ **Required Field Indicators** - Fields marked as required in OpenAPI include `@required` tag in JavaDoc  
 
@@ -50,22 +51,29 @@ pip install pyyaml
 ```
 ## Quick Start
 
-### Step 0: Prepare OpenAPI Specification
+### Step 0: Prepare OpenAPI Specification & Configuration
 
-Ensure your `openapi.yaml` file is complete and placed in the project root:
+1. **OpenAPI File**: Ensure your `openapi.yaml` file is complete and placed in the project root (or specify a different path in `config.yaml`)
+
+2. **Configuration**: On first run, `config.yaml` will be created automatically with default values. You can customize it if needed.
 
 ```
 OpenApi2Java/
 ├── openapi.yaml              ← YOUR OpenAPI SPECIFICATION (REQUIRED)
+├── config.yaml               ← AUTO-GENERATED configuration (customizable)
+├── config.yaml.example       ← Example configuration (for reference)
 ├── openapi.yaml.template     ← Template/example (for reference only)
+├── config.py                 ← Configuration module
+├── main.py                   ← Main execution script
 ├── generate_json_examples.py
 ├── generate_java_classes.py
 └── README.md
 ```
 
 **Quick Start:**
-- If you have an existing OpenAPI spec: Place it as `openapi.yaml` in the root
+- If you have an existing OpenAPI spec: Place it as `openapi.yaml` in the root (or configure path in `config.yaml`)
 - If starting from scratch: Use `openapi.yaml.template` as a reference
+- Configuration is automatic: `config.yaml` is created on first run with sensible defaults
 
 Example minimal `openapi.yaml` structure:
 ```yaml
@@ -462,38 +470,105 @@ public class MessageDetail {
 
 ## Configuration
 
-### Required: `openapi.yaml`
+The generator uses a `config.yaml` file for configuration. This file is **automatically created** with default values when you run `main.py` for the first time.
 
-**This file must be created/provided by you** and placed in the project root. It should contain your complete OpenAPI specification.
+### Configuration File (`config.yaml`)
+
+The configuration file is in `.gitignore` and allows you to customize:
+
+```yaml
+# OpenAPI to Java Generator Configuration
+# This file is auto-generated and can be customized
+
+# Base package name for generated Java classes
+base_package: com.java
+
+# Output folder for generated Java classes
+java_folder: java
+
+# Output folder for generated JSON examples
+examples_folder: examples
+
+# OpenAPI specification file
+openapi_file: openapi.yaml
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `base_package` | `com.java` | Base package name for all generated Java classes |
+| `java_folder` | `java` | Output directory for generated Java classes |
+| `examples_folder` | `examples` | Output directory for generated JSON examples |
+| `openapi_file` | `openapi.yaml` | Path to your OpenAPI specification file |
+
+### How to Customize Configuration
+
+1. **First run**: When you execute `main.py`, `config.yaml` is created automatically with default values
+2. **Customize**: Edit `config.yaml` to match your project structure
+3. **Version control**: The file is in `.gitignore`, so each developer can have their own configuration
+
+**Example custom configuration:**
+```yaml
+base_package: com.mycompany.api.models
+java_folder: src/main/java/com/mycompany/api/models
+examples_folder: target/examples
+openapi_file: specifications/my-api.yaml
+```
+
+### Using Configuration in Scripts
+
+All scripts (`main.py`, `generate_json_examples.py`, `generate_java_classes.py`) automatically load configuration from `config.yaml`:
+
+```python
+from config import BASE_PACKAGE, JAVA_FOLDER, EXAMPLES_FOLDER, OPENAPI_FILE
+```
+
+The configuration module:
+- ✅ Auto-creates `config.yaml` if it doesn't exist
+- ✅ Validates and merges with default values
+- ✅ Provides configuration as importable constants
+- ✅ Shows helpful messages when creating defaults
+
+## Legacy Configuration (Deprecated)
 
 ### `generate_json_examples.py`
 ```python
-openapi_file_path = 'openapi.yaml'  # Path to your OpenAPI specification
-output_directory = 'examples'        # Where JSON examples will be saved
+# Old way (hardcoded)
+openapi_file_path = 'openapi.yaml'
+output_directory = 'examples'
+
+# New way (from config.yaml)
+from config import OPENAPI_FILE, EXAMPLES_FOLDER
 ```
 
 ### `generate_java_classes.py`
 ```python
-examples_directory = 'examples'                              # Input: JSON examples
-output_directory = 'java' # Output: Java files
-package_name = 'com.java' # Java package name
+# Old way (hardcoded)
+examples_directory = 'examples'
+output_directory = 'java'
+package_name = 'com.java'
+
+# New way (from config.yaml)
+from config import EXAMPLES_FOLDER, JAVA_FOLDER, BASE_PACKAGE
 ```
 
 ## How to Use
 
 ### Running the Main Script
 
-The `main.py` script automates the entire process of generating examples and Java classes. It ensures that the `openapi.yaml` file exists, deletes old `java` and `examples` folders, and regenerates them.
+The `main.py` script automates the entire process of generating examples and Java classes. It ensures that the OpenAPI file exists (as specified in `config.yaml`), deletes old output folders, and regenerates them.
 
 ```bash
 python3 main.py
 ```
 
 ### What the Script Does
-1. Checks if `openapi.yaml` exists in the root directory.
-2. Deletes the `java` and `examples` folders if they exist.
-3. Runs `generate_json_examples.py` to create JSON examples.
-4. Runs `generate_java_classes.py` to generate Java classes from the examples.
+1. Loads configuration from `config.yaml` (creates it with defaults if it doesn't exist)
+2. Checks if the OpenAPI file exists (from configuration)
+3. Deletes the output folders if they exist (from configuration)
+4. Runs `generate_json_examples.py` to create JSON examples
+5. Runs `generate_java_classes.py` to generate Java classes from OpenAPI schema
 
 ### Output Structure
 - `java/` - Contains generated Java classes organized by endpoints.

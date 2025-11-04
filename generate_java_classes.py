@@ -8,6 +8,63 @@ import yaml
 import re
 import shutil
 
+def to_java_package_name(folder_path):
+    """Convert folder path to Java package name, preserving exact capitalization."""
+    # Remove leading/trailing slashes
+    path = folder_path.strip('/')
+    # Replace path separators with dots
+    path = path.replace('/', '.').replace('\\', '.')
+    # Keep the exact capitalization - no conversion to lowercase
+    # Just ensure valid Java package naming (alphanumeric and underscores)
+    parts = path.split('.')
+    valid_parts = []
+    for part in parts:
+        if part:
+            # Keep original case
+            valid_parts.append(part)
+    return '.'.join(valid_parts)
+
+def get_package_for_file(file_path, base_package, output_dir, detect_package=False):
+    """
+    Get the full package name for a file based on its location.
+    Args:
+        file_path: Full path to the Java file
+        base_package: Base package name (e.g., 'com.java')
+        output_dir: Root output directory (e.g., 'java')
+        detect_package: If True, append folder structure to package name
+    Returns:
+        Full package name (e.g., 'com.java.post_claim.body.related')
+    """
+    if not detect_package:
+        return base_package
+
+    # Get the directory of the file
+    file_dir = os.path.dirname(file_path)
+
+    # Make paths absolute for comparison
+    file_dir = os.path.abspath(file_dir)
+    output_dir = os.path.abspath(output_dir)
+
+    # Get relative path from output_dir to file_dir
+    try:
+        rel_path = os.path.relpath(file_dir, output_dir)
+    except ValueError:
+        # If paths are on different drives (Windows), use base package only
+        return base_package
+
+    # If file is directly in output_dir
+    if rel_path == '.':
+        return base_package
+
+    # Convert relative path to package notation
+    sub_package = to_java_package_name(rel_path)
+
+    # Combine base package with sub-package
+    if sub_package:
+        return f"{base_package}.{sub_package}"
+    else:
+        return base_package
+
 def to_java_class_name(name):
     """Convert schema name to Java class name."""
     if re.match(r'^[A-Z][a-zA-Z0-9]*$', name):
@@ -323,7 +380,7 @@ def find_oneof_base_class(schema_name, schemas):
                             return to_java_class_name(prop_name)
     return None
 
-def generate_java_class_from_schema(schema_name, schemas, package, processed=None):
+def generate_java_class_from_schema(schema_name, schemas, package, processed=None, enable_javadoc=True, enable_imports=False):
     """Generate Java class from OpenAPI schema."""
     if processed is None:
         processed = set()
@@ -405,10 +462,11 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
             java_type = f"T{to_java_class_name(prop_name)}"
             types_list = [to_java_class_name(t.get('$ref', '').split('/')[-1]) for t in oneof_types if '$ref' in t]
 
-            # Generate JavaDoc for oneOf field (always generate for oneOf)
-            javadoc = generate_field_javadoc(field_description, is_required, types_list)
-            if javadoc:
-                fields.append(javadoc)
+            # Generate JavaDoc for oneOf field if enabled
+            if enable_javadoc:
+                javadoc = generate_field_javadoc(field_description, is_required, types_list)
+                if javadoc:
+                    fields.append(javadoc)
 
             # Add base class to referenced classes
             referenced_classes.add(to_java_class_name(prop_name))
@@ -422,8 +480,8 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
                 if type_class not in ['String', 'Integer', 'Long', 'Double', 'Boolean', 'LocalDate', 'LocalDateTime', 'Object', 'List']:
                     referenced_classes.add(type_class)
 
-            # Generate JavaDoc for regular field (always generate if there's description or required)
-            if field_description or is_required:
+            # Generate JavaDoc for regular field if enabled
+            if enable_javadoc and (field_description or is_required):
                 javadoc = generate_field_javadoc(field_description, is_required)
                 if javadoc:
                     fields.append(javadoc)
@@ -443,21 +501,23 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
     if base_class_name:
         referenced_classes.add(base_class_name)
 
-    # Don't add imports for referenced classes - commented out
-    # for ref_class in sorted(referenced_classes):
-    #     imports.add(f"import {package}.{ref_class};")
+    # Add imports for referenced classes if enabled
+    if enable_imports:
+        for ref_class in sorted(referenced_classes):
+            imports.add(f"import {package}.{ref_class};")
 
     # Build class
     java_code = f"package {package};\n\n"
     java_code += "\n".join(sorted(imports)) + "\n\n"
 
-    # Always add class JavaDoc
-    class_description = schema.get('description', '')
-    if not class_description:
-        class_description = f"{class_name} class."
-    class_javadoc = generate_class_javadoc(class_description)
-    if class_javadoc:
-        java_code += class_javadoc + "\n"
+    # Add class JavaDoc if enabled
+    if enable_javadoc:
+        class_description = schema.get('description', '')
+        if not class_description:
+            class_description = f"{class_name} class."
+        class_javadoc = generate_class_javadoc(class_description)
+        if class_javadoc:
+            java_code += class_javadoc + "\n"
 
     java_code += "@Data\n"
 
@@ -492,16 +552,19 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
 
     return java_code
 
-def generate_base_class_for_oneof(base_name, package):
+def generate_base_class_for_oneof(base_name, package, enable_javadoc=True):
     """Generate abstract base class for oneOf."""
     java_code = f"package {package};\n\n"
     java_code += "import lombok.Data;\n"
     java_code += "import lombok.NoArgsConstructor;\n"
     java_code += "import lombok.AllArgsConstructor;\n\n"
-    java_code += "/**\n"
-    java_code += " * Polymorphic base class for oneOf types.\n"
-    java_code += " * All concrete implementations will extend this class.\n"
-    java_code += " */\n"
+
+    if enable_javadoc:
+        java_code += "/**\n"
+        java_code += " * Polymorphic base class for oneOf types.\n"
+        java_code += " * All concrete implementations will extend this class.\n"
+        java_code += " */\n"
+
     java_code += "@Data\n"
     java_code += "@NoArgsConstructor\n"
     java_code += "@AllArgsConstructor\n"
@@ -706,7 +769,7 @@ def generate_inline_classes(schema_name, schemas, package, folder_dir):
 
     return generated
 
-def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, package):
+def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, package, enable_javadoc=True, enable_imports=False):
     """Generate Java class from an inline schema definition."""
     imports = set()
     imports.add("import lombok.Data;")
@@ -756,8 +819,8 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         if "LocalDate" in java_type:
             imports.add("import java.time.LocalDate;")
 
-        # Generate JavaDoc for field (always generate if there's description or required)
-        if field_description or is_required:
+        # Generate JavaDoc for field if enabled
+        if enable_javadoc and (field_description or is_required):
             javadoc = generate_field_javadoc(field_description, is_required)
             if javadoc:
                 fields.append(javadoc)
@@ -765,21 +828,23 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         # Add field declaration
         fields.append(f"    private {java_type} {java_field};")
 
-    # Don't add imports for referenced classes - commented out
-    # for ref_class in sorted(referenced_classes):
-    #     imports.add(f"import {package}.{ref_class};")
+    # Add imports for referenced classes if enabled
+    if enable_imports:
+        for ref_class in sorted(referenced_classes):
+            imports.add(f"import {package}.{ref_class};")
 
     # Build class
     java_code = f"package {package};\n\n"
     java_code += "\n".join(sorted(imports)) + "\n\n"
 
-    # Always add class JavaDoc
-    class_description = inline_schema.get('description', '')
-    if not class_description:
-        class_description = f"{class_name} class."
-    class_javadoc = generate_class_javadoc(class_description)
-    if class_javadoc:
-        java_code += class_javadoc + "\n"
+    # Add class JavaDoc if enabled
+    if enable_javadoc:
+        class_description = inline_schema.get('description', '')
+        if not class_description:
+            class_description = f"{class_name} class."
+        class_javadoc = generate_class_javadoc(class_description)
+        if class_javadoc:
+            java_code += class_javadoc + "\n"
 
     java_code += "@Data\n"
 
@@ -809,9 +874,12 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
 
     return java_code
 
-def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package):
+def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package, enable_javadoc=True, enable_imports=False, detect_package=False, base_output_dir=None):
     """Process a single endpoint and generate all necessary classes."""
     print(f"\n📁 Processing endpoint: {endpoint_name}")
+
+    if base_output_dir is None:
+        base_output_dir = output_dir
 
     endpoint_dir = os.path.join(output_dir, endpoint_name)
     all_schemas_for_endpoint = set()
@@ -837,13 +905,13 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
             if oneof_field and oneof_types:
                 base_name = to_java_class_name(oneof_field)
                 if base_name not in generated:
-                    java_code = generate_base_class_for_oneof(base_name, package)
+                    java_code = generate_base_class_for_oneof(base_name, package, enable_javadoc)
                     filepath = os.path.join(body_dir, f"{base_name}.java")
                     with open(filepath, 'w', encoding='utf-8') as f:
                         f.write(java_code)
                     generated.add(base_name)
 
-            java_code = generate_java_class_from_schema(schema_name, schemas, package)
+            java_code = generate_java_class_from_schema(schema_name, schemas, package, enable_javadoc=enable_javadoc, enable_imports=enable_imports)
             if java_code:
                 filepath = os.path.join(body_dir, f"{to_java_class_name(schema_name)}.java")
                 with open(filepath, 'w', encoding='utf-8') as f:
@@ -885,13 +953,13 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
             if oneof_field and oneof_types:
                 base_name = to_java_class_name(oneof_field)
                 if base_name not in generated:
-                    java_code = generate_base_class_for_oneof(base_name, package)
+                    java_code = generate_base_class_for_oneof(base_name, package, enable_javadoc)
                     filepath = os.path.join(response_dir, f"{base_name}.java")
                     with open(filepath, 'w', encoding='utf-8') as f:
                         f.write(java_code)
                     generated.add(base_name)
 
-            java_code = generate_java_class_from_schema(schema_name, schemas, package)
+            java_code = generate_java_class_from_schema(schema_name, schemas, package, enable_javadoc=enable_javadoc, enable_imports=enable_imports)
             if java_code:
                 filepath = os.path.join(response_dir, f"{to_java_class_name(schema_name)}.java")
                 with open(filepath, 'w', encoding='utf-8') as f:
@@ -909,7 +977,7 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
         organize_classes_in_folder(response_dir, to_java_class_name(response_schema), generated, schemas)
         print(f"      📂 Organized into main class + related/")
 
-def generate_unused_schemas(schemas, output_dir, package):
+def generate_unused_schemas(schemas, output_dir, package, enable_javadoc=True, enable_imports=False):
     """
     Generate classes for schemas that are not used in any endpoint.
     These are placed in a NO_ENDPOINT folder organized by inheritance.
@@ -954,13 +1022,13 @@ def generate_unused_schemas(schemas, output_dir, package):
         if oneof_field and oneof_types:
             base_name = to_java_class_name(oneof_field)
             if base_name not in generated:
-                java_code = generate_base_class_for_oneof(base_name, package)
+                java_code = generate_base_class_for_oneof(base_name, package, enable_javadoc)
                 filepath = os.path.join(no_endpoint_dir, f"{base_name}.java")
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(java_code)
                 generated.add(base_name)
 
-        java_code = generate_java_class_from_schema(schema_name, schemas, package)
+        java_code = generate_java_class_from_schema(schema_name, schemas, package, enable_javadoc=enable_javadoc, enable_imports=enable_imports)
         if java_code:
             filepath = os.path.join(no_endpoint_dir, f"{to_java_class_name(schema_name)}.java")
             with open(filepath, 'w', encoding='utf-8') as f:
@@ -1046,12 +1114,89 @@ def organize_no_endpoint_by_inheritance(no_endpoint_dir, schemas):
                     shutil.move(src, dest)
                 processed.add(child_name)
 
+def update_file_packages(output_dir, base_package, enable_imports, detect_package):
+    """
+    Update package declarations and imports in all Java files if detect_package is enabled.
+    Only updates if enable_imports is True.
+    """
+    if not enable_imports or not detect_package:
+        return
+
+    print(f"\n🔄 Updating packages based on folder structure...")
+
+    # First pass: collect all class locations
+    class_to_package = {}
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if not filename.endswith('.java'):
+                continue
+
+            filepath = os.path.join(root, filename)
+            class_name = filename[:-5]
+            pkg = get_package_for_file(filepath, base_package, output_dir, detect_package)
+            class_to_package[class_name] = pkg
+
+    # Second pass: update package declarations and imports
+    updated_count = 0
+    for root, dirs, files in os.walk(output_dir):
+        for filename in files:
+            if not filename.endswith('.java'):
+                continue
+
+            filepath = os.path.join(root, filename)
+
+            # Read file content
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Calculate correct package for this file
+            correct_package = get_package_for_file(filepath, base_package, output_dir, detect_package)
+
+            # Replace package declaration
+            content = re.sub(r'^package\s+[\w.]+;', f'package {correct_package};', content, flags=re.MULTILINE)
+
+            # Update imports: replace base_package.ClassName with correct_package.ClassName
+            # Find all import statements
+            import_pattern = r'import\s+([\w.]+)\.([\w]+);'
+
+            def replace_import(match):
+                full_package = match.group(1)
+                class_name = match.group(2)
+
+                # If this is one of our generated classes, update its package
+                if class_name in class_to_package:
+                    return f'import {class_to_package[class_name]}.{class_name};'
+                else:
+                    # Keep original import (for java.util, lombok, etc.)
+                    return match.group(0)
+
+            content = re.sub(import_pattern, replace_import, content)
+
+            # Write back
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            updated_count += 1
+
+    print(f"   ✅ Updated {updated_count} files with dynamic packages")
+
 def main():
-    openapi_file = 'openapi.yaml'
-    output_dir = 'java'
-    package = 'com.java'
+    from config import OPENAPI_FILE, JAVA_FOLDER, BASE_PACKAGE, ENABLE_JAVADOC, ENABLE_IMPORTS, DETECT_PACKAGE
+
+    openapi_file = OPENAPI_FILE
+    output_dir = JAVA_FOLDER
+    package = BASE_PACKAGE
+    enable_javadoc = ENABLE_JAVADOC
+    enable_imports = ENABLE_IMPORTS
+    detect_package = DETECT_PACKAGE
 
     print("=== Generating Java classes from OpenAPI schema ===\n")
+    print(f"Configuration:")
+    print(f"  - Package: {package}")
+    print(f"  - Output: {output_dir}")
+    print(f"  - JavaDoc: {'enabled' if enable_javadoc else 'disabled'}")
+    print(f"  - Imports: {'enabled' if enable_imports else 'disabled'}")
+    print(f"  - Detect Package: {'enabled' if detect_package else 'disabled'}\n")
 
     # Load OpenAPI
     with open(openapi_file, 'r', encoding='utf-8') as f:
@@ -1111,7 +1256,7 @@ def main():
 
             # Process endpoint
             if request_schema or response_schemas:
-                process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package)
+                process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package, enable_javadoc, enable_imports)
                 endpoint_count += 1
 
     print(f"\n✅ Processed {endpoint_count} endpoints")
@@ -1119,8 +1264,10 @@ def main():
 
     # Generate unused schemas in NO_ENDPOINT folder
     print(f"\n📦 Processing unused schemas...")
-    generate_unused_schemas(schemas, output_dir, package)
+    generate_unused_schemas(schemas, output_dir, package, enable_javadoc, enable_imports)
+
+    # Update packages and imports in all files if enabled
+    update_file_packages(output_dir, package, enable_imports, detect_package)
 
 if __name__ == '__main__':
     main()
-

@@ -3,6 +3,7 @@ examples/
 java/
 
 # Config files
+config.yaml
 *.yaml
 *.yml
 *.json

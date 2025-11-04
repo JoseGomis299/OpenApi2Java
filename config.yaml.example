@@ -1,0 +1,33 @@
+# OpenAPI to Java Generator Configuration
+# This file is auto-generated and can be customized
+
+# JSON Examples Configuration
+json:
+  # Output folder for generated JSON examples
+  examples_folder: examples
+
+# Java Code Generation Configuration
+java:
+  # Base package name for generated Java classes
+  base_package: com.java
+
+  # Output folder for generated Java classes
+  java_folder: java
+
+  # Enable or disable JavaDoc generation for classes and fields
+  enable_javadoc: true
+
+  # Enable or disable imports for referenced classes
+  # If true, classes will import all necessary dependencies
+  # If false, classes use simple names without imports
+  enable_imports: true
+
+  # Enable or disable dynamic package detection based on folder structure
+  # If true, package names will reflect the folder structure (e.g., com.java.POST_claim.body.related)
+  # If false, all classes use the same base package (e.g., com.java)
+  # Note: This only works when enable_imports is true
+  detect_package: true
+
+# OpenAPI specification file
+openapi_file: openapi.yaml
+
