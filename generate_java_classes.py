@@ -1118,7 +1118,11 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
     return java_code
 
 def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package, enable_javadoc=True, enable_imports=False, detect_package=False, base_output_dir=None):
-    """Process a single endpoint and generate all necessary classes."""
+    """Process a single endpoint and generate all necessary classes.
+
+    Returns:
+        dict: Mapping of class names to their file paths for this endpoint only.
+    """
     print(f"\n📁 Processing endpoint: {endpoint_name}")
 
     if base_output_dir is None:
@@ -1126,6 +1130,7 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
 
     endpoint_dir = os.path.join(output_dir, endpoint_name)
     all_schemas_for_endpoint = set()
+    endpoint_classes = {}  # Track all classes generated for this endpoint
 
     # Process request body
     if request_schema and request_schema in schemas:
@@ -1153,6 +1158,7 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
                     with open(filepath, 'w', encoding='utf-8') as f:
                         f.write(java_code)
                     generated.add(base_name)
+                    endpoint_classes[base_name] = filepath
 
             java_code = generate_java_class_from_schema(schema_name, schemas, package, enable_javadoc=enable_javadoc, enable_imports=enable_imports)
             if java_code:
@@ -1160,17 +1166,31 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(java_code)
                 generated.add(schema_name)
+                endpoint_classes[to_java_class_name(schema_name)] = filepath
 
         # Generate inline classes
         for schema_name in sorted(deps):
             inline_generated = generate_inline_classes(schema_name, schemas, package, body_dir)
             generated.update(inline_generated)
+            # Track inline classes
+            for inline_class in inline_generated:
+                inline_filepath = os.path.join(body_dir, f"{to_java_class_name(inline_class)}.java")
+                if os.path.exists(inline_filepath):
+                    endpoint_classes[to_java_class_name(inline_class)] = inline_filepath
 
         print(f"      ✅ Generated {len(generated)} classes for request")
 
         # Organize classes in body folder
         organize_classes_in_folder(body_dir, to_java_class_name(request_schema), generated, schemas)
         print(f"      📂 Organized into main class + related/")
+
+        # Update endpoint_classes with new paths after reorganization
+        for class_name in list(endpoint_classes.keys()):
+            # Find the new location of this class
+            for root, dirs, files in os.walk(body_dir):
+                if f"{class_name}.java" in files:
+                    endpoint_classes[class_name] = os.path.join(root, f"{class_name}.java")
+                    break
 
     # Process responses
     for response_schema in response_schemas:
@@ -1201,6 +1221,7 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
                     with open(filepath, 'w', encoding='utf-8') as f:
                         f.write(java_code)
                     generated.add(base_name)
+                    endpoint_classes[base_name] = filepath
 
             java_code = generate_java_class_from_schema(schema_name, schemas, package, enable_javadoc=enable_javadoc, enable_imports=enable_imports)
             if java_code:
@@ -1208,17 +1229,33 @@ def process_endpoint(endpoint_name, request_schema, response_schemas, schemas, o
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(java_code)
                 generated.add(schema_name)
+                endpoint_classes[to_java_class_name(schema_name)] = filepath
 
         # Generate inline classes
         for schema_name in sorted(deps):
             inline_generated = generate_inline_classes(schema_name, schemas, package, response_dir)
             generated.update(inline_generated)
+            # Track inline classes
+            for inline_class in inline_generated:
+                inline_filepath = os.path.join(response_dir, f"{to_java_class_name(inline_class)}.java")
+                if os.path.exists(inline_filepath):
+                    endpoint_classes[to_java_class_name(inline_class)] = inline_filepath
 
         print(f"      ✅ Generated {len(generated)} classes for response")
 
         # Organize classes in response folder
         organize_classes_in_folder(response_dir, to_java_class_name(response_schema), generated, schemas)
         print(f"      📂 Organized into main class + related/")
+
+        # Update endpoint_classes with new paths after reorganization
+        for class_name in list(endpoint_classes.keys()):
+            # Find the new location of this class
+            for root, dirs, files in os.walk(response_dir):
+                if f"{class_name}.java" in files:
+                    endpoint_classes[class_name] = os.path.join(root, f"{class_name}.java")
+                    break
+
+    return endpoint_classes
 
 def generate_unused_schemas(schemas, output_dir, package, enable_javadoc=True, enable_imports=False):
     """
@@ -1423,6 +1460,72 @@ def update_file_packages(output_dir, base_package, enable_imports, detect_packag
 
     print(f"   ✅ Updated {updated_count} files with dynamic packages")
 
+def update_endpoint_packages(endpoint_dir, endpoint_classes, base_package, output_dir, detect_package):
+    """
+    Update package declarations for a specific endpoint using only its own classes.
+
+    Args:
+        endpoint_dir: Directory of the endpoint
+        endpoint_classes: Dict mapping class names to file paths for this endpoint
+        base_package: Base package name
+        output_dir: Root output directory
+        detect_package: Whether to detect package from folder structure
+    """
+    if not detect_package:
+        return
+
+    # Build class to package mapping for this endpoint only
+    class_to_package = {}
+    for class_name, filepath in endpoint_classes.items():
+        pkg = get_package_for_file(filepath, base_package, output_dir, detect_package)
+        class_to_package[class_name] = pkg
+
+    # Update all files in this endpoint directory
+    updated_count = 0
+    for root, dirs, files in os.walk(endpoint_dir):
+        for filename in files:
+            if not filename.endswith('.java'):
+                continue
+
+            filepath = os.path.join(root, filename)
+
+            # Read file content
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Calculate correct package for this file
+            correct_package = get_package_for_file(filepath, base_package, output_dir, detect_package)
+
+            # Replace package declaration
+            content = re.sub(r'^package\s+[\w.]+;', f'package {correct_package};', content, flags=re.MULTILINE)
+
+            # Update imports: replace base_package.ClassName with correct_package.ClassName
+            # Find all import statements
+            import_pattern = r'import\s+([\w.]+)\.([\w]+);'
+
+            def replace_import(match):
+                full_package = match.group(1)
+                class_name = match.group(2)
+
+                # If this is one of our generated classes in this endpoint, update its package
+                if class_name in class_to_package:
+                    return f'import {class_to_package[class_name]}.{class_name};'
+                else:
+                    # Keep original import (for java.util, lombok, etc.)
+                    return match.group(0)
+
+            content = re.sub(import_pattern, replace_import, content)
+
+            # Write back
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            updated_count += 1
+
+    if updated_count > 0:
+        print(f"      🔄 Updated {updated_count} files with endpoint-specific packages and imports")
+
+
 def main():
     from config import OPENAPI_FILE, JAVA_FOLDER, BASE_PACKAGE, ENABLE_JAVADOC, ENABLE_IMPORTS, DETECT_PACKAGE
 
@@ -1499,7 +1602,10 @@ def main():
 
             # Process endpoint
             if request_schema or response_schemas:
-                process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package, enable_javadoc, enable_imports)
+                endpoint_classes = process_endpoint(endpoint_name, request_schema, response_schemas, schemas, output_dir, package, enable_javadoc, enable_imports, detect_package, output_dir)
+                # Update packages for this endpoint using only its classes
+                endpoint_dir = os.path.join(output_dir, endpoint_name)
+                update_endpoint_packages(endpoint_dir, endpoint_classes, package, output_dir, detect_package)
                 endpoint_count += 1
 
     print(f"\n✅ Processed {endpoint_count} endpoints")
@@ -1509,8 +1615,6 @@ def main():
     print(f"\n📦 Processing unused schemas...")
     generate_unused_schemas(schemas, output_dir, package, enable_javadoc, enable_imports)
 
-    # Update packages and imports in all files if enabled
-    update_file_packages(output_dir, package, enable_imports, detect_package)
 
 if __name__ == '__main__':
     main()
