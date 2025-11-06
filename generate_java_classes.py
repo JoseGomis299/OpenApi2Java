@@ -1516,6 +1516,45 @@ def update_endpoint_packages(endpoint_dir, endpoint_classes, base_package, outpu
 
             content = re.sub(import_pattern, replace_import, content)
 
+            # Remove imports of classes that are in the same package as the current file
+            # Split content into lines to process imports
+            lines = content.split('\n')
+            filtered_lines = []
+
+            # Find where imports end (after package and imports, before class declaration)
+            import_section_end = 0
+            for i, line in enumerate(lines):
+                if line.strip() and not line.strip().startswith('package') and not line.strip().startswith('import') and not line.strip().startswith('//') and not line.strip().startswith('/*') and not line.strip().startswith('*'):
+                    import_section_end = i
+                    break
+
+            # Get the code section (everything after imports)
+            code_section = '\n'.join(lines[import_section_end:])
+
+            for i, line in enumerate(lines):
+                # Check if this is an import statement
+                import_match = re.match(r'import\s+([\w.]+)\.([\w]+);', line)
+                if import_match:
+                    import_package = import_match.group(1)
+                    imported_class = import_match.group(2)
+
+                    # Only keep the import if it's from a different package
+                    if import_package != correct_package:
+                        # Also check if the import is actually used in the code section
+                        # Look for the class name with strict word boundaries
+                        # Use negative lookahead/lookbehind to avoid partial matches
+                        # For example, LocalDate should not match LocalDateTime
+                        class_pattern = r'(?<![a-zA-Z0-9])' + re.escape(imported_class) + r'(?![a-zA-Z0-9])'
+                        # Search only in the code section (not in imports)
+                        if re.search(class_pattern, code_section):
+                            filtered_lines.append(line)
+                        # else: skip unused import
+                    # else: skip import from same package
+                else:
+                    filtered_lines.append(line)
+
+            content = '\n'.join(filtered_lines)
+
             # Write back
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
