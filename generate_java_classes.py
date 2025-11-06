@@ -668,16 +668,8 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         base_type_name = to_java_class_name(oneof_field_name)
         generic_param = f"T{base_type_name} extends {base_type_name}"
 
-    # Build imports
+    # Build imports (Lombok imports will be added later based on fields)
     imports = set()
-    imports.add("import lombok.Data;")
-    imports.add("import lombok.NoArgsConstructor;")
-    imports.add("import lombok.AllArgsConstructor;")
-
-    if base_class_name:
-        imports.add("import lombok.EqualsAndHashCode;")
-    else:
-        imports.add("import lombok.Builder;")
 
     # Build fields
     fields = []
@@ -749,9 +741,25 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         for ref_class in sorted(referenced_classes):
             imports.add(f"import {package}.{ref_class};")
 
+    # Determine which Lombok annotations are needed
+    lombok_imports = set()
+    lombok_imports.add("import lombok.Data;")
+    lombok_imports.add("import lombok.NoArgsConstructor;")
+
+    if fields:
+        lombok_imports.add("import lombok.AllArgsConstructor;")
+        if not base_class_name:
+            lombok_imports.add("import lombok.Builder;")
+
+    if base_class_name:
+        lombok_imports.add("import lombok.EqualsAndHashCode;")
+
+    # Combine all imports
+    all_imports = imports.union(lombok_imports)
+
     # Build class
     java_code = f"package {package};\n\n"
-    java_code += "\n".join(sorted(imports)) + "\n\n"
+    java_code += "\n".join(sorted(all_imports)) + "\n\n"
 
     # Add class JavaDoc if enabled
     if enable_javadoc:
@@ -768,7 +776,9 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         java_code += "@EqualsAndHashCode(callSuper = true)\n"
 
     java_code += "@NoArgsConstructor\n"
-    java_code += "@AllArgsConstructor\n"
+    # Only add @AllArgsConstructor if the class has fields
+    if fields:
+        java_code += "@AllArgsConstructor\n"
 
     # Class declaration
     if base_class_name:
@@ -777,7 +787,9 @@ def generate_java_class_from_schema(schema_name, schemas, package, processed=Non
         else:
             java_code += f"public class {class_name} extends {base_class_name} {{\n\n"
     else:
-        java_code += "@Builder\n"
+        # Only add @Builder if the class has fields
+        if fields:
+            java_code += "@Builder\n"
         if generic_param:
             java_code += f"public class {class_name}<{generic_param}> {{\n\n"
         else:
@@ -799,8 +811,7 @@ def generate_base_class_for_oneof(base_name, package, enable_javadoc=True):
     """Generate abstract base class for oneOf."""
     java_code = f"package {package};\n\n"
     java_code += "import lombok.Data;\n"
-    java_code += "import lombok.NoArgsConstructor;\n"
-    java_code += "import lombok.AllArgsConstructor;\n\n"
+    java_code += "import lombok.NoArgsConstructor;\n\n"
 
     if enable_javadoc:
         java_code += "/**\n"
@@ -810,7 +821,6 @@ def generate_base_class_for_oneof(base_name, package, enable_javadoc=True):
 
     java_code += "@Data\n"
     java_code += "@NoArgsConstructor\n"
-    java_code += "@AllArgsConstructor\n"
     java_code += f"public abstract class {base_name} {{\n"
     java_code += "}\n"
     return java_code
@@ -1014,17 +1024,11 @@ def generate_inline_classes(schema_name, schemas, package, folder_dir):
 
 def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, package, enable_javadoc=True, enable_imports=False):
     """Generate Java class from an inline schema definition."""
+    # Imports (Lombok imports will be added later based on fields)
     imports = set()
-    imports.add("import lombok.Data;")
-    imports.add("import lombok.NoArgsConstructor;")
-    imports.add("import lombok.AllArgsConstructor;")
 
     # Check if this inline class has a base class
     base_class = inline_schema.get('base_class')
-    if base_class:
-        imports.add("import lombok.EqualsAndHashCode;")
-    else:
-        imports.add("import lombok.Builder;")
 
     fields = []
     referenced_classes = set()
@@ -1076,9 +1080,25 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         for ref_class in sorted(referenced_classes):
             imports.add(f"import {package}.{ref_class};")
 
+    # Determine which Lombok annotations are needed
+    lombok_imports = set()
+    lombok_imports.add("import lombok.Data;")
+    lombok_imports.add("import lombok.NoArgsConstructor;")
+    
+    if fields:
+        lombok_imports.add("import lombok.AllArgsConstructor;")
+        if not base_class:
+            lombok_imports.add("import lombok.Builder;")
+    
+    if base_class:
+        lombok_imports.add("import lombok.EqualsAndHashCode;")
+
+    # Combine all imports
+    all_imports = imports.union(lombok_imports)
+
     # Build class
     java_code = f"package {package};\n\n"
-    java_code += "\n".join(sorted(imports)) + "\n\n"
+    java_code += "\n".join(sorted(all_imports)) + "\n\n"
 
     # Add class JavaDoc if enabled
     if enable_javadoc:
@@ -1095,9 +1115,12 @@ def generate_java_class_from_inline_schema(class_name, inline_schema, schemas, p
         java_code += "@EqualsAndHashCode(callSuper = true)\n"
 
     java_code += "@NoArgsConstructor\n"
-    java_code += "@AllArgsConstructor\n"
+    # Only add @AllArgsConstructor if the class has fields
+    if fields:
+        java_code += "@AllArgsConstructor\n"
 
-    if not base_class:
+    # Only add @Builder if the class has fields and no base class
+    if not base_class and fields:
         java_code += "@Builder\n"
 
     if base_class:
