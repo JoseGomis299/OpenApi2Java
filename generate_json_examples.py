@@ -249,7 +249,92 @@ def process_schema(schema_name, schemas, endpoint_dir, folder_name):
         print(f"      ✅ {len(dependencies)} related schemas in related/")
 
 
+def generate_all_schemas_folder(openapi_file, output_folder):
+    """Generate ALL_SCHEMAS folder with unique schemas organized by inheritance."""
+    with open(openapi_file, 'r', encoding='utf-8') as f:
+        openapi_definition = yaml.safe_load(f)
+
+    schemas = openapi_definition.get('components', {}).get('schemas', {})
+    if not schemas:
+        return
+
+    all_schemas_dir = os.path.join(output_folder, 'ALL_SCHEMAS')
+    if os.path.exists(all_schemas_dir):
+        import shutil
+        shutil.rmtree(all_schemas_dir)
+    os.makedirs(all_schemas_dir, exist_ok=True)
+
+    print(f"\n📦 Generating ALL_SCHEMAS folder...")
+
+    # Build inheritance map
+    inheritance_map = {}
+    for schema_name, schema_def in schemas.items():
+        parent = None
+        if 'allOf' in schema_def:
+            for item in schema_def['allOf']:
+                if '$ref' in item:
+                    parent = item['$ref'].split('/')[-1]
+                    break
+        inheritance_map[schema_name] = parent
+
+    # Organize schemas by inheritance hierarchy
+    base_schemas = {name for name, parent in inheritance_map.items() if parent is None}
+
+    # Generate base schemas at root level
+    for schema_name in sorted(base_schemas):
+        example = generate_example_from_schema(schemas[schema_name], schemas)
+        file_path = os.path.join(all_schemas_dir, f"{schema_name}.json")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(example, f, indent=4, cls=CustomJSONEncoder)
+
+    print(f"   ✅ Generated {len(base_schemas)} base schemas")
+
+    # Generate derived schemas in subdirectories
+    for schema_name, parent in sorted(inheritance_map.items()):
+        if parent:
+            # Create subdirectory for parent if it doesn't exist
+            parent_dir = os.path.join(all_schemas_dir, parent)
+            os.makedirs(parent_dir, exist_ok=True)
+
+            example = generate_example_from_schema(schemas[schema_name], schemas)
+            file_path = os.path.join(parent_dir, f"{schema_name}.json")
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(example, f, indent=4, cls=CustomJSONEncoder)
+
+    derived_count = sum(1 for parent in inheritance_map.values() if parent)
+    if derived_count > 0:
+        print(f"   ✅ Generated {derived_count} derived schemas organized by parent")
+
+    print(f"   📁 Total schemas in ALL_SCHEMAS: {len(schemas)}")
+
+
 if __name__ == '__main__':
-    from config import OPENAPI_FILE, EXAMPLES_FOLDER
-    extract_and_save_schema_examples(OPENAPI_FILE, EXAMPLES_FOLDER)
+    from config import get_config, get_openapi_definition_files
+
+    config = get_config()
+    base_examples_folder = config['json']['examples_folder']
+
+    definition_files = get_openapi_definition_files()
+
+    if not definition_files:
+        print("❌ No OpenAPI definition files found!")
+        exit(1)
+
+    print(f"🚀 Generating JSON examples from {len(definition_files)} definition(s)...\n")
+
+    for name, file_path in definition_files:
+        # Create subdirectory for this definition
+        output_folder = os.path.join(base_examples_folder, name)
+        print(f"\n{'='*60}")
+        print(f"📋 Processing: {name} ({file_path})")
+        print(f"{'='*60}")
+
+        extract_and_save_schema_examples(file_path, output_folder)
+
+        # Generate ALL_SCHEMAS folder
+        generate_all_schemas_folder(file_path, output_folder)
+
+    print(f"\n{'='*60}")
+    print(f"✅ All JSON examples generated successfully!")
+    print(f"{'='*60}")
 

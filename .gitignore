@@ -1,6 +1,7 @@
 # Generated examples and java classes
 examples/
 java/
+feign/
 
 # Config files
 config.yaml

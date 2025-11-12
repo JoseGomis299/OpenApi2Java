@@ -1,23 +1,26 @@
 # OpenAPI to Java Spring Classes Generator
 
-Automated tool to convert OpenAPI YAML specifications into Java Spring classes with Lombok annotations. Features intelligent inheritance detection and clean code generation.
+Automated tool to convert OpenAPI YAML specifications into Java Spring classes with Lombok annotations and Spring Cloud OpenFeign clients. Features intelligent inheritance detection, clean code generation, and automatic API client generation.
 
 ## Overview
 
-**Two-step process:**
+**Three-step process:**
 1. Extract JSON examples from OpenAPI endpoints (organized by METHOD_endpoint/body|response/related)
 2. Generate Java Spring classes from JSON examples (same organization structure)
+3. Generate Spring Cloud OpenFeign client interfaces from OpenAPI specification
 
 **Organization Strategy:**
 - Examples and classes are organized by API endpoints
 - Each endpoint folder contains `body/` and/or `response/` subdirectories
 - Main schema is at the top level, all dependencies in `related/` subfolder
 - Classes that appear in multiple endpoints are duplicated (no shared folder)
+- Feign clients are organized by OpenAPI tags in a separate folder
 - All packages remain as `com.java` (imports not modified)
 
 ## Key Features
 
 ✅ **Endpoint-Based Organization** - Files organized by API endpoints (METHOD_endpoint/body|response/related)  
+✅ **ALL_SCHEMAS Folder** - Consolidated view of all unique schemas organized by inheritance hierarchy  
 ✅ **Smart Inheritance Detection** - Automatically detects `allOf` patterns in OpenAPI  
 ✅ **OneOf Polymorphism Support** - Uses class-level generics with bounded type parameters  
 ✅ **Complete Dependency Trees** - All related classes (including polymorphic children) in related/ folder  
@@ -29,6 +32,10 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 ✅ **Configurable** - All paths and package names configurable via `config.yaml`  
 ✅ **JavaDoc Documentation** - Classes and fields include JavaDoc with descriptions from OpenAPI schema  
 ✅ **Required Field Indicators** - Fields marked as required in OpenAPI include `@required` tag in JavaDoc  
+✅ **Feign Client Generation** - Automatic Spring Cloud OpenFeign client interfaces with proper annotations  
+✅ **Tag-Based Client Organization** - One Feign client per OpenAPI tag (e.g., Claim, Proceeding, Document)  
+✅ **Generic Types with Wildcards** - Schemas with oneOf properties generate generic types (e.g., `ClaimDetail<? extends ClaimDamagesSpecific>`)  
+✅ **Parameter Filtering** - Configurable parameter exclusion in Feign clients (optional params, specific params)  
 
 ## Prerequisites
 
@@ -51,51 +58,61 @@ pip install pyyaml
 ```
 ## Quick Start
 
-### Step 0: Prepare OpenAPI Specification & Configuration
+### Step 0: Prepare OpenAPI Specifications & Configuration
 
-1. **OpenAPI File**: Ensure your `openapi.yaml` file is complete and placed in the project root (or specify a different path in `config.yaml`)
+1. **OpenAPI Files**: Place your OpenAPI YAML files in the `openApiDefinitions/` directory
+   - The tool processes all `.yaml` and `.yml` files in this directory
+   - Each definition generates output in its own subdirectory
+   - Example: `openApiDefinitions/my-api.yaml` → `feign/my-api/`, `java/my-api/`, `examples/my-api/`
 
-2. **Configuration**: On first run, `config.yaml` will be created automatically with default values. You can customize it if needed.
+2. **Configuration**: On first run, `config.yaml` will be created automatically with default values
 
 ```
 OpenApi2Java/
-├── openapi.yaml              ← YOUR OpenAPI SPECIFICATION (REQUIRED)
-├── config.yaml               ← AUTO-GENERATED configuration (customizable)
-├── config.yaml.example       ← Example configuration (for reference)
-├── openapi.yaml.template     ← Template/example (for reference only)
-├── config.py                 ← Configuration module
-├── main.py                   ← Main execution script
+├── openApiDefinitions/           ← YOUR OpenAPI YAML FILES (auto-created)
+│   ├── my-api.yaml
+│   ├── another-api.yaml
+│   └── ...
+├── config.yaml                   ← Configuration (auto-generated)
+├── config.py                     ← Configuration module
+├── main.py                       ← Main execution script
 ├── generate_json_examples.py
 ├── generate_java_classes.py
+├── generate_feign_clients.py
 └── README.md
 ```
 
 **Quick Start:**
-- If you have an existing OpenAPI spec: Place it as `openapi.yaml` in the root (or configure path in `config.yaml`)
-- If starting from scratch: Use `openapi.yaml.template` as a reference
-- Configuration is automatic: `config.yaml` is created on first run with sensible defaults
+- Run any script once to auto-create the `openApiDefinitions/` directory
+- Add your OpenAPI YAML files to `openApiDefinitions/`
+- Each file will be processed independently
+- Configuration is automatic: `config.yaml` is created on first run
 
-Example minimal `openapi.yaml` structure:
+Example minimal OpenAPI file structure:
 ```yaml
 openapi: 3.0.1
 info:
   title: Your API
   version: "1.0"
 paths:
-  /claim:
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ClaimDetail'
+  /example:
+    get:
+      tags:
+        - Example
       responses:
-        '201':
+        '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClaimCreate'
+                $ref: '#/components/schemas/ExampleResponse'
 components:
+  schemas:
+    ExampleResponse:
+      type: object
+      properties:
+        message:
+          type: string
+```components:
   schemas:
     ClaimDetail:
       type: object
@@ -470,48 +487,186 @@ public class MessageDetail {
 
 ## Configuration
 
-The generator uses a `config.yaml` file for configuration. This file is **automatically created** with default values when you run `main.py` for the first time.
+The generator uses a `config.yaml` file for configuration. This file is **automatically created** with default values when you run any script for the first time.
 
 ### Configuration File (`config.yaml`)
 
-The configuration file is in `.gitignore` and allows you to customize:
+Example configuration:
 
 ```yaml
-# OpenAPI to Java Generator Configuration
-# This file is auto-generated and can be customized
+json:
+  examples_folder: examples
 
-# Base package name for generated Java classes
-base_package: com.java
+java:
+  base_package: com.mycompany.api.model
+  java_folder: java
+  enable_javadoc: true
+  enable_imports: true
+  detect_package: true
 
-# Output folder for generated Java classes
-java_folder: java
+openapi_definitions_dir: openApiDefinitions
 
-# Output folder for generated JSON examples
-examples_folder: examples
-
-# OpenAPI specification file
-openapi_file: openapi.yaml
+feign:
+  base_package: com.mycompany.api.client
+  feign_folder: feign
+  enable_javadoc: true
+  interface_suffix: Client
+  generate_config: true
+  grouping_strategy: single-client
+  use_response_entity: false
+  format_one_param_per_line: true
+  add_feign_annotation: true
 ```
 
 ### Configuration Options
 
+#### JSON Examples
+
 | Option | Default | Description |
 |--------|---------|-------------|
-| `base_package` | `com.java` | Base package name for all generated Java classes |
-| `java_folder` | `java` | Output directory for generated Java classes |
-| `examples_folder` | `examples` | Output directory for generated JSON examples |
-| `openapi_file` | `openapi.yaml` | Path to your OpenAPI specification file |
+| `json.examples_folder` | `examples` | Output directory for generated JSON examples |
+
+#### Java Classes
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `java.base_package` | `com.java` | Base package name for all generated Java classes |
+| `java.java_folder` | `java` | Output directory for generated Java classes |
+| `java.enable_javadoc` | `true` | Enable JavaDoc generation for classes and fields |
+| `java.enable_imports` | `true` | Enable imports for referenced classes. If false, uses simple names |
+| `java.detect_package` | `true` | Dynamic package detection based on folder structure. Only works when `enable_imports` is true |
+
+#### OpenAPI Definitions
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `openapi_definitions_dir` | `openApiDefinitions` | Directory containing OpenAPI YAML files to process |
+
+#### Feign Clients
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `feign.base_package` | `com.java.client` | Base package for Feign client interfaces |
+| `feign.feign_folder` | `feign` | Output directory for Feign clients |
+| `feign.enable_javadoc` | `true` | Generate JavaDoc for interfaces and methods |
+| `feign.interface_suffix` | `Client` | Suffix for interface names (e.g., `APIClaimHomeClient`) |
+| `feign.generate_config` | `true` | Generate FeignConfiguration class with common settings |
+| `feign.grouping_strategy` | `single-client` | `single-client`: One interface with all endpoints grouped by tag comments<br>`by-tag`: Separate interface per tag |
+| `feign.use_response_entity` | `false` | Wrap return types in `ResponseEntity<T>`. If false, returns type directly |
+| `feign.format_one_param_per_line` | `true` | Format method parameters with one per line for readability |
+| `feign.add_feign_annotation` | `true` | Add `@FeignClient` annotation to generated interfaces |
+| `feign.ignore_optional_params` | `false` | Skip all optional (non-required) parameters from method signatures |
+| `feign.ignore_params_list` | `[]` | List of specific parameter names to exclude (e.g., `['X-Request-processId', 'Accept-Language']`) |
+
+### Grouping Strategies Explained
+
+#### single-client (Recommended)
+Generates a single interface containing all API endpoints, organized with comment separators by tag:
+
+```java
+public interface APIClaimHomeClient {
+    
+    // ========================================
+    // Claim
+    // ========================================
+    
+    @GetMapping("/claim/{id}")
+    Claim getClaim(@PathVariable("id") String id);
+    
+    // ========================================
+    // Document
+    // ========================================
+    
+    @PostMapping("/document")
+    Document createDocument(@RequestBody DocumentRequest body);
+}
+```
+
+#### by-tag
+Generates separate interfaces for each OpenAPI tag:
+- `ClaimClient.java` - Only claim operations
+- `DocumentClient.java` - Only document operations
+- etc.
+
+### Parameter Filtering
+
+The Feign client generator allows you to exclude parameters from method signatures using two mechanisms:
+
+#### 1. Ignore Optional Parameters
+
+Set `ignore_optional_params: true` to exclude all non-required parameters:
+
+```yaml
+feign:
+  ignore_optional_params: true
+```
+
+**Before:**
+```java
+@GetMapping("/claim/{id}")
+Claim getClaim(
+    @PathVariable("id") String id,
+    @RequestHeader("Accept-Language") String acceptLanguage,
+    @RequestHeader(value = "X-Request-processId", required = false) String xRequestProcessid
+);
+```
+
+**After:**
+```java
+@GetMapping("/claim/{id}")
+Claim getClaim(
+    @PathVariable("id") String id,
+    @RequestHeader("Accept-Language") String acceptLanguage
+);
+```
+
+#### 2. Ignore Specific Parameters
+
+Use `ignore_params_list` to exclude specific parameters by name:
+
+```yaml
+feign:
+  ignore_params_list:
+    - X-Request-processId
+    - Accept-Language
+    - X-Debug-Mode
+```
+
+**Before:**
+```java
+@GetMapping("/claim/{id}")
+Claim getClaim(
+    @PathVariable("id") String id,
+    @RequestHeader("Accept-Language") String acceptLanguage,
+    @RequestHeader("X-Request-applicationId") String xRequestApplicationid,
+    @RequestHeader(value = "X-Request-processId", required = false) String xRequestProcessid
+);
+```
+
+**After:**
+```java
+@GetMapping("/claim/{id}")
+Claim getClaim(
+    @PathVariable("id") String id,
+    @RequestHeader("X-Request-applicationId") String xRequestApplicationid
+);
+```
+
+**Use Cases:**
+- Remove logging/tracing headers handled by interceptors
+- Exclude optional parameters that have sensible defaults
+- Simplify client interfaces by removing rarely-used parameters
+- Clean up legacy parameters that are no longer needed
+
+**Note:** Both filtering options can be used together. The tool will skip a parameter if:
+- It appears in `ignore_params_list`, OR
+- It's optional AND `ignore_optional_params` is true
 
 ### How to Customize Configuration
 
-1. **First run**: When you execute `main.py`, `config.yaml` is created automatically with default values
-2. **Customize**: Edit `config.yaml` to match your project structure
-3. **Version control**: The file is in `.gitignore`, so each developer can have their own configuration
-
-**Example custom configuration:**
-```yaml
-base_package: com.mycompany.api.models
-java_folder: src/main/java/com/mycompany/api/models
+1. **First run**: Execute any script to auto-create `config.yaml`
+2. **Customize**: Edit the generated file to match your project structure
+3. **Apply**: Re-run the scripts to regenerate with new settings
 examples_folder: target/examples
 openapi_file: specifications/my-api.yaml
 ```
@@ -533,9 +688,10 @@ The configuration module:
 ## Legacy Configuration (Deprecated)
 
 ### `generate_json_examples.py`
+
 ```python
 # Old way (hardcoded)
-openapi_file_path = 'openapi.yaml'
+openapi_file_path = 'openApiDefinitions/claim-home.yaml'
 output_directory = 'examples'
 
 # New way (from config.yaml)
@@ -569,7 +725,286 @@ python3 main.py
 3. Deletes the output folders if they exist (from configuration)
 4. Runs `generate_json_examples.py` to create JSON examples
 5. Runs `generate_java_classes.py` to generate Java classes from OpenAPI schema
+6. Runs `generate_feign_clients.py` to generate Spring Cloud OpenFeign client interfaces
 
 ### Output Structure
-- `java/` - Contains generated Java classes organized by endpoints.
-- `examples/` - Contains JSON examples organized by endpoints.
+- `java/` - Contains generated Java classes organized by endpoints
+  - `<api-name>/` - Subdirectory per OpenAPI definition
+    - `GET_endpoint/`, `POST_endpoint/`, etc. - Endpoint-specific classes
+    - `NO_ENDPOINT/` - Schemas not used in any endpoint
+    - `ALL_SCHEMAS/` - **NEW**: All unique schemas organized by inheritance
+- `examples/` - Contains JSON examples organized by endpoints
+  - `<api-name>/` - Subdirectory per OpenAPI definition
+    - `GET_endpoint/`, `POST_endpoint/`, etc. - Endpoint-specific examples
+    - `ALL_SCHEMAS/` - **NEW**: All unique schema examples organized by inheritance
+- `feign/` - Contains generated Feign client interfaces
+  - `<api-name>/` - Subdirectory per OpenAPI definition
+
+### ALL_SCHEMAS Folder
+
+**New Feature**: Both JSON examples and Java classes now generate an `ALL_SCHEMAS` folder containing all unique schemas organized by inheritance hierarchy.
+
+**Structure:**
+```
+ALL_SCHEMAS/
+├── BaseSchema1.json (or .java)
+├── BaseSchema2.json (or .java)
+├── BaseSchema1/
+│   ├── DerivedSchema1.json (or .java)
+│   └── DerivedSchema2.json (or .java)
+└── BaseSchema2/
+    └── DerivedSchema3.json (or .java)
+```
+
+**Benefits:**
+- **Consolidated View**: All schemas in one place
+- **No Duplicates**: Each schema appears only once
+- **Clear Hierarchy**: Inheritance relationships visible in folder structure
+- **Easy Navigation**: Find base classes and their derivatives instantly
+
+**Example:**
+```
+java/claim-home-catalog/ALL_SCHEMAS/
+├── Error.java                    # Base class
+├── PatrimonialAvailability.java  # Base class
+├── Error/
+│   ├── ErrorComponent.java       # Extends Error
+│   └── ErrorInfo.java             # Extends Error
+└── AvailabilityResponse.java     # Base class
+```
+
+## Feign Client Generation
+
+The generator now includes automatic creation of Spring Cloud OpenFeign client interfaces based on your OpenAPI specification. This eliminates the need to manually write HTTP client code.
+
+### What are Feign Clients?
+
+Spring Cloud OpenFeign is a declarative HTTP client framework that makes writing HTTP clients easier. Instead of manually implementing REST clients with RestTemplate or WebClient, you simply define an interface with annotations, and Feign handles the implementation.
+
+### Generated Feign Clients
+
+#### Standalone Generation
+
+You can generate only Feign clients without running the full pipeline:
+
+```bash
+python3 generate_feign_clients.py
+```
+
+#### Features
+
+- **Tag-Based Organization**: One Feign client interface per OpenAPI tag (e.g., ClaimClient, ProceedingClient, DocumentClient)
+- **Spring Annotations**: Proper `@FeignClient`, `@GetMapping`, `@PostMapping`, etc.
+- **Type-Safe Parameters**: All path variables, query params, headers, and request bodies
+- **ResponseEntity Wrappers**: All methods return `ResponseEntity<T>` for proper HTTP handling
+- **JavaDoc Documentation**: Includes summaries and descriptions from OpenAPI
+- **Configuration Class**: Optional FeignConfiguration class with common settings
+
+#### Example Generated Feign Client
+
+**OpenAPI Definition:**
+```yaml
+paths:
+  /claim/{claimId}:
+    get:
+      tags:
+        - Claim
+      summary: Get a certain claim.
+      description: Get a certain claim, given its unique claim ID.
+      operationId: getClaimHome
+      parameters:
+        - name: claimId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Claim"
+```
+
+**Generated Feign Client:**
+```java
+package com.mapfresaluddigital.apichannelhome.client;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+
+/**
+ * Feign client for Claim operations.
+ * Business API containing claim/assistance opening and management operations for Spain.
+ */
+@FeignClient(name = "claim", url = "${feign.client.claim.url}")
+public interface ClaimClient {
+
+    /**
+     * Get a certain claim.
+     * Get a certain claim, given its unique claim ID.
+     *
+     * @param claimId
+     * @return Claim
+     */
+    @GetMapping("/claim/{claimId}")
+    ResponseEntity<Claim> getClaimHome(@PathVariable("claimId") String claimId);
+
+    /**
+     * Generate claim.
+     * Generate claim.
+     *
+     * @param body
+     * @return ClaimCreate
+     */
+    @PostMapping("/claim")
+    ResponseEntity<ClaimCreate> generateClaimPatrimonial(@RequestBody ClaimDetail body);
+}
+```
+
+### Configuration
+
+Feign client generation is fully configurable via `config.yaml`:
+
+```yaml
+# Feign Client Generation Configuration
+feign:
+  # Base package name for generated Feign clients
+  base_package: com.mapfresaluddigital.apichannelhome.client
+  
+  # Output folder for generated Feign clients
+  feign_folder: feign
+  
+  # Enable or disable JavaDoc generation for Feign interfaces and methods
+  enable_javadoc: true
+  
+  # Suffix to append to interface names (e.g., ClaimClient)
+  interface_suffix: Client
+  
+  # Generate FeignConfiguration classes
+  generate_config: true
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `base_package` | `com.java.client` | Base package for Feign client interfaces |
+| `feign_folder` | `feign` | Output directory for Feign clients |
+| `enable_javadoc` | `true` | Generate JavaDoc for interfaces and methods |
+| `interface_suffix` | `Client` | Suffix for interface names (e.g., ClaimClient) |
+| `generate_config` | `true` | Generate FeignConfiguration class |
+
+### Using Generated Feign Clients
+
+1. **Add Spring Cloud OpenFeign Dependency** (Maven):
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-openfeign</artifactId>
+</dependency>
+```
+
+2. **Enable Feign Clients** in your Spring Boot application:
+```java
+@SpringBootApplication
+@EnableFeignClients(basePackages = "com.mapfresaluddigital.apichannelhome.client")
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+```
+
+3. **Configure Base URLs** in `application.yml`:
+```yaml
+feign:
+  client:
+    claim:
+      url: https://api.example.com/api/v1
+    proceeding:
+      url: https://api.example.com/api/v1
+    document:
+      url: https://api.example.com/api/v1
+```
+
+4. **Inject and Use** in your services:
+```java
+@Service
+public class ClaimService {
+    
+    private final ClaimClient claimClient;
+    
+    public ClaimService(ClaimClient claimClient) {
+        this.claimClient = claimClient;
+    }
+    
+    public Claim getClaim(String claimId) {
+        ResponseEntity<Claim> response = claimClient.getClaimHome(claimId);
+        return response.getBody();
+    }
+    
+    public ClaimCreate createClaim(ClaimDetail details) {
+        ResponseEntity<ClaimCreate> response = claimClient.generateClaimPatrimonial(details);
+        return response.getBody();
+    }
+}
+```
+
+### Generated FeignConfiguration
+
+When `generate_config: true`, a configuration class is created:
+
+```java
+package com.mapfresaluddigital.apichannelhome.client.config;
+
+import feign.Logger;
+import feign.RequestInterceptor;
+import feign.codec.ErrorDecoder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * Common Feign client configuration.
+ */
+@Configuration
+public class FeignConfiguration {
+
+    /**
+     * Set Feign logging level.
+     */
+    @Bean
+    public Logger.Level feignLoggerLevel() {
+        return Logger.Level.FULL;
+    }
+
+    /**
+     * Custom error decoder for Feign clients.
+     */
+    @Bean
+    public ErrorDecoder errorDecoder() {
+        return new ErrorDecoder.Default();
+    }
+}
+```
+
+This provides a central place to configure:
+- Logging levels
+- Error handling
+- Request/response interceptors
+- Custom encoders/decoders
+
+### Output Structure
+```
+feign/
+  ClaimClient.java
+  ProceedingClient.java
+  CommunicationClient.java
+  IndemnityClient.java
+  DocumentClient.java
+  TaskClient.java
+  AssistanceClient.java
+  config/
+    FeignConfiguration.java
+```
