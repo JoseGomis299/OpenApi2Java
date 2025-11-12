@@ -33,19 +33,39 @@ def to_java_method_name(operation_id):
     return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:] if word)
 
 def to_java_param_name(name):
-    """Convert parameter name to valid Java identifier (camelCase)."""
+    """Convert parameter name to valid Java identifier (camelCase), preserving internal camelCase."""
     if not name:
         return "param"
     # If already valid camelCase, keep it
     if re.match(r'^[a-z][a-zA-Z0-9]*$', name):
         return name
-    # Convert hyphens and other special chars to camelCase
-    name = name.replace('-', '_')
+
+    # Split by hyphens, underscores, and spaces while preserving camelCase within parts
+    # First replace hyphens and spaces with underscores for uniform splitting
+    name = name.replace('-', '_').replace(' ', '_')
     name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-    parts = re.split(r'[_\s]+', name)
+    parts = [part for part in name.split('_') if part]
+
     if not parts:
         return "param"
-    return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:] if word)
+
+    # First part should be lowercase, rest should preserve their camelCase or capitalize if all lowercase
+    result_parts = []
+    for i, part in enumerate(parts):
+        if i == 0:
+            # First part: convert to lowercase
+            result_parts.append(part.lower())
+        else:
+            # Subsequent parts: preserve if already has uppercase (camelCase), otherwise capitalize first letter
+            if any(c.isupper() for c in part):
+                # Has uppercase letters - preserve as is (e.g., "applicationId" stays "applicationId")
+                # But ensure first letter is uppercase for concatenation
+                result_parts.append(part[0].upper() + part[1:] if part else '')
+            else:
+                # All lowercase - capitalize first letter
+                result_parts.append(part.capitalize())
+
+    return ''.join(result_parts)
 
 def get_java_type_from_schema(schema, schemas, components):
     """Determine Java type from schema reference or inline schema."""
