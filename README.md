@@ -21,34 +21,15 @@ Automated tool to convert OpenAPI YAML specifications into Java Spring classes w
 
 ✅ **Endpoint-Based Organization** - Files organized by API endpoints (METHOD_endpoint/body|response/related)  
 ✅ **ALL_SCHEMAS Folder** - Consolidated view of all unique schemas organized by inheritance hierarchy  
-✅ **Smart Inheritance Detection** - Automatically detects `allOf` patterns in OpenAPI  
-✅ **OneOf Polymorphism Support** - Uses class-level generics with bounded type parameters  
-✅ **Complete Dependency Trees** - All related classes (including polymorphic children) in related/ folder  
-✅ **Separate File Generation** - Each class in its own file (no nested static classes)  
-✅ **CamelCase Preservation** - Maintains proper Java naming conventions  
-✅ **Clean Code** - No JSON annotations, pure Lombok POJOs  
-✅ **Full Reference Resolution** - Handles `$ref`, `allOf`, `oneOf`, `anyOf`  
-✅ **Type Safety** - Proper generic types for Lists and nested objects  
-✅ **Configurable** - All paths and package names configurable via `config.yaml`  
-✅ **JavaDoc Documentation** - Classes and fields include JavaDoc with descriptions from OpenAPI schema  
-✅ **Required Field Indicators** - Fields marked as required in OpenAPI include `@required` tag in JavaDoc  
-✅ **Feign Client Generation** - Automatic Spring Cloud OpenFeign client interfaces with proper annotations  
-✅ **Tag-Based Client Organization** - One Feign client per OpenAPI tag (e.g., Claim, Proceeding, Document)  
-✅ **Generic Types with Wildcards** - Schemas with oneOf properties generate generic types (e.g., `ClaimDetail<? extends ClaimDamagesSpecific>`)  
-✅ **Parameter Filtering** - Configurable parameter exclusion in Feign clients (optional params, specific params)  
+✅ **Smart Inheritance Detection** - Automatically detects `allOf` patterns and generates proper class hierarchies  
+✅ **OneOf Polymorphism Support** - Generic types with bounded parameters for polymorphic fields  
+✅ **Clean Lombok POJOs** - One class per file, no JSON annotations, proper separation of concerns  
+✅ **Feign Client Generation** - Automatic Spring Cloud OpenFeign client interfaces from OpenAPI  
+✅ **Full Configurability** - All paths, packages, and generation behavior via `config.yaml`  
 
 ## Prerequisites
 
-### 1. OpenAPI Specification File
-
-**⚠️ IMPORTANT:** You must have a complete `openapi.yaml` file in the project root directory before running the scripts.
-
-The `openapi.yaml` file should contain:
-- Complete schema definitions in `components/schemas`
-- Proper type definitions for all models
-- `allOf` patterns for inheritance relationships (if needed)
-
-### 2. Python Dependencies
+### Python Dependencies
 
 **Required:** Install PyYAML before running the scripts
 
@@ -92,37 +73,47 @@ Example minimal OpenAPI file structure:
 ```yaml
 openapi: 3.0.1
 info:
-  title: Your API
+  title: Product API
   version: "1.0"
 paths:
-  /example:
+  /products/{id}:
     get:
       tags:
-        - Example
+        - Product
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExampleResponse'
+                $ref: '#/components/schemas/Product'
 components:
   schemas:
-    ExampleResponse:
+    Product:
       type: object
+      required:
+        - id
+        - name
+        - price
       properties:
-        message:
+        id:
           type: string
-```components:
-  schemas:
-    ClaimDetail:
-      type: object
-      properties:
-        policyId:
+          description: Unique product identifier
+        name:
           type: string
-        claimDamagesSpecific:
-          oneOf:
-            - $ref: '#/components/schemas/ApplianceDamagesInfo'
-            - $ref: '#/components/schemas/WaterDamagesInfo'
+          description: Product name
+        price:
+          type: number
+          description: Product price
+        category:
+          type: string
+          description: Product category
 ```
 
 ### Step 1: Generate JSON Examples
@@ -135,85 +126,101 @@ python generate_json_examples.py
 
 ```
 examples/
-  POST_claim/
+  POST_products/
     body/
-      ClaimDetail.json                    ← Main request body
+      ProductRequest.json              ← Main request body
       related/
-        ClaimDamagesSpecific.json
-        ApplianceDamagesInfo.json
-        WaterDamagesInfo.json
-        ClaimCaller.json
+        Category.json
+        Supplier.json
+        PriceInfo.json
         ...
     response/
-      ClaimCreate.json                    ← Main response
+      ProductResponse.json             ← Main response
       related/
         ...
-  GET_claim/
+  GET_products/
     response/
-      Claim.json
+      Product.json
       related/
         ...
+  ALL_SCHEMAS/                         ← All unique schemas
+    Product.json
+    Category.json
+    Supplier.json
+    ...
 ```
 
 ### Step 2: Generate Java Classes
 
 ```bash
 python generate_java_classes.py
-# Select option 3 for manual generation
 ```
 
 **Output:** Java files in `java/` with same structure:
 
 ```
 java/
-  POST_claim/
+  POST_products/
     body/
-      ClaimDetail.java                    ← Main request class
+      ProductRequest.java              ← Main request class
       related/
-        ClaimDamagesSpecific.java         ← Polymorphic base
-        ApplianceDamagesInfo.java         ← Implementation 1
-        WaterDamagesInfo.java             ← Implementation 2
-        ClaimCaller.java
-        ClaimOcurrenceAddress.java
-        Damage.java
-        AvailabilitiesRecord.java
-        ...                               ← ALL dependencies
-    response/
-      ClaimCreate.java
-  GET_claim/
-    response/
-      Claim.java
-      related/
-        ClaimBase.java
+        Category.java
+        Supplier.java
+        PriceInfo.java
         ...
+    response/
+      ProductResponse.java
+  GET_products/
+    response/
+      Product.java
+      related/
+        ...
+  ALL_SCHEMAS/                         ← All unique schemas organized by inheritance
+    Product.java
+    Category.java
+    paymentMethod/
+      PaymentMethod.java               ← Parent class
+      CreditCard.java                  ← Child class
+      BankTransfer.java                ← Child class
 ```
 
-**Note:** Classes used in multiple endpoints are duplicated in each endpoint folder.
+**Note:** Classes used in multiple endpoints are duplicated in each endpoint folder. ALL_SCHEMAS provides a consolidated view with inheritance organization.
 
 ## Generated Code Examples
 
 ### Parent Class with Inheritance
 ```java
-package com.java;
+package com.mycompany.api.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/**
+ * Car entity extending base Vehicle class.
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class Car extends Vehicle {
+    /**
+     * Engine specifications.
+     * @required This field is required
+     */
     private Engine engine;
+    
+    /**
+     * Car owner information.
+     */
     private Owner owner;
 }
 ```
 
 ### Nested Class as Separate File
 ```java
-package com.java;
+package com.mycompany.api.model;
 
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -231,20 +238,21 @@ import lombok.NoArgsConstructor;
 public class Owner {
     /**
      * First name of the owner.
-     *
      * @required This field is required
      */
     private String firstName;
+    
     /**
      * Last name of the owner.
-     *
      * @required This field is required
      */
     private String lastName;
+    
     /**
      * Owner's address.
      */
     private Address address;
+    
     /**
      * List of contact methods.
      */
@@ -256,7 +264,7 @@ public class Owner {
 
 ### Base Class
 ```java
-package com.java;
+package com.mycompany.api.model;
 
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -264,6 +272,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Base vehicle information.
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -284,13 +295,16 @@ When your OpenAPI schema uses `oneOf`, the generator creates:
 3. Uses class-level generics with bounded type parameters
 
 ```java
-package com.java;
+package com.mycompany.api.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Payment transaction information.
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -298,44 +312,63 @@ import lombok.NoArgsConstructor;
 public class Payment<TPaymentMethod extends PaymentMethod> {
     private String paymentId;
     private Double amount;
-    // Can be one of: CreditCardInfo, BankAccountInfo, PayPalInfo, CryptoWalletInfo
+    /**
+     * Can be one of: CreditCardInfo, BankAccountInfo, PayPalInfo, CryptoWalletInfo
+     */
     private TPaymentMethod paymentMethod;
 }
 ```
 
 **Generated base class:**
 ```java
-package com.java;
+package com.mycompany.api.model;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
+/**
+ * Polymorphic base class for oneOf types.
+ * All concrete implementations will extend this class.
+ */
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public abstract class PaymentMethod {
-    // Polymorphic base class for oneOf types
-    // All concrete implementations will extend this class
 }
 ```
 
 **Specific implementation example:**
 ```java
-package com.java;
+package com.mycompany.api.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/**
+ * Credit card payment information.
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreditCardInfo extends PaymentMethod {
+    /**
+     * Credit card number.
+     * @required This field is required
+     */
     private String cardNumber;
+    
+    /**
+     * Card expiration date (MM/YY format).
+     * @required This field is required
+     */
     private String expirationDate;
+    
+    /**
+     * Card verification value.
+     * @required This field is required
+     */
     private String cvv;
 }
 ```
@@ -382,44 +415,58 @@ All generated classes include JavaDoc documentation. Fields with descriptions in
 
 **OpenAPI schema example:**
 ```yaml
-MessageDetail:
-  description: Object that encapsulates the information of the message related to a proceed.
+ContactMessage:
+  description: Message information for customer contact.
   required:
-    - name
+    - senderName
     - messageText
   type: object
   properties:
-    name:
+    senderName:
       type: string
-      description: Full name of sender.
+      description: Full name of the sender.
     messageText:
       type: string
-      description: Text of the message.
-    contact:
-      $ref: "#/components/schemas/MessageContact"
-    address:
-      $ref: "#/components/schemas/MessageAddress"
+      description: Content of the message.
+    contactInfo:
+      $ref: "#/components/schemas/ContactInfo"
+    preferredContactTime:
+      type: string
+      description: Preferred time for contact response.
 ```
 
 **Generated Java class:**
 ```java
+package com.mycompany.api.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 /**
- * Object that encapsulates the information of the message related to a proceed.
+ * Message information for customer contact.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class MessageDetail {
+public class ContactMessage {
     /**
-     * Full name of sender.
+     * Full name of the sender.
      * @required This field is required
      */
-    private String name;
-    private MessageContact contact;
-    private MessageAddress address;
+    private String senderName;
+    
+    private ContactInfo contactInfo;
+    
     /**
-     * Text of the message.
+     * Preferred time for contact response.
+     */
+    private String preferredContactTime;
+    
+    /**
+     * Content of the message.
      * @required This field is required
      */
     private String messageText;
@@ -564,28 +611,28 @@ feign:
 Generates a single interface containing all API endpoints, organized with comment separators by tag:
 
 ```java
-public interface APIClaimHomeClient {
+public interface APIProductClient {
     
     // ========================================
-    // Claim
+    // Product
     // ========================================
     
-    @GetMapping("/claim/{id}")
-    Claim getClaim(@PathVariable("id") String id);
+    @GetMapping("/products/{id}")
+    Product getProduct(@PathVariable("id") String id);
     
     // ========================================
-    // Document
+    // Order
     // ========================================
     
-    @PostMapping("/document")
-    Document createDocument(@RequestBody DocumentRequest body);
+    @PostMapping("/orders")
+    Order createOrder(@RequestBody OrderRequest body);
 }
 ```
 
 #### by-tag
 Generates separate interfaces for each OpenAPI tag:
-- `ClaimClient.java` - Only claim operations
-- `DocumentClient.java` - Only document operations
+- `ProductClient.java` - Only product operations
+- `OrderClient.java` - Only order operations
 - etc.
 
 ### Parameter Filtering
@@ -603,18 +650,18 @@ feign:
 
 **Before:**
 ```java
-@GetMapping("/claim/{id}")
-Claim getClaim(
+@GetMapping("/products/{id}")
+Product getProduct(
     @PathVariable("id") String id,
     @RequestHeader("Accept-Language") String acceptLanguage,
-    @RequestHeader(value = "X-Request-processId", required = false) String xRequestProcessid
+    @RequestHeader(value = "X-Request-TraceId", required = false) String xRequestTraceId
 );
 ```
 
 **After:**
 ```java
-@GetMapping("/claim/{id}")
-Claim getClaim(
+@GetMapping("/products/{id}")
+Product getProduct(
     @PathVariable("id") String id,
     @RequestHeader("Accept-Language") String acceptLanguage
 );
@@ -627,28 +674,28 @@ Use `ignore_params_list` to exclude specific parameters by name:
 ```yaml
 feign:
   ignore_params_list:
-    - X-Request-processId
+    - X-Request-TraceId
     - Accept-Language
     - X-Debug-Mode
 ```
 
 **Before:**
 ```java
-@GetMapping("/claim/{id}")
-Claim getClaim(
+@GetMapping("/products/{id}")
+Product getProduct(
     @PathVariable("id") String id,
     @RequestHeader("Accept-Language") String acceptLanguage,
-    @RequestHeader("X-Request-applicationId") String xRequestApplicationid,
-    @RequestHeader(value = "X-Request-processId", required = false) String xRequestProcessid
+    @RequestHeader("X-Request-ApplicationId") String xRequestApplicationId,
+    @RequestHeader(value = "X-Request-TraceId", required = false) String xRequestTraceId
 );
 ```
 
 **After:**
 ```java
-@GetMapping("/claim/{id}")
-Claim getClaim(
+@GetMapping("/products/{id}")
+Product getProduct(
     @PathVariable("id") String id,
-    @RequestHeader("X-Request-applicationId") String xRequestApplicationid
+    @RequestHeader("X-Request-ApplicationId") String xRequestApplicationId
 );
 ```
 
@@ -667,16 +714,13 @@ Claim getClaim(
 1. **First run**: Execute any script to auto-create `config.yaml`
 2. **Customize**: Edit the generated file to match your project structure
 3. **Apply**: Re-run the scripts to regenerate with new settings
-examples_folder: target/examples
-openapi_file: specifications/my-api.yaml
-```
 
 ### Using Configuration in Scripts
 
 All scripts (`main.py`, `generate_json_examples.py`, `generate_java_classes.py`) automatically load configuration from `config.yaml`:
 
 ```python
-from config import BASE_PACKAGE, JAVA_FOLDER, EXAMPLES_FOLDER, OPENAPI_FILE
+from config import get_config, get_openapi_definition_files
 ```
 
 The configuration module:
@@ -685,47 +729,24 @@ The configuration module:
 - ✅ Provides configuration as importable constants
 - ✅ Shows helpful messages when creating defaults
 
-## Legacy Configuration (Deprecated)
-
-### `generate_json_examples.py`
-
-```python
-# Old way (hardcoded)
-openapi_file_path = 'openApiDefinitions/claim-home.yaml'
-output_directory = 'examples'
-
-# New way (from config.yaml)
-from config import OPENAPI_FILE, EXAMPLES_FOLDER
-```
-
-### `generate_java_classes.py`
-```python
-# Old way (hardcoded)
-examples_directory = 'examples'
-output_directory = 'java'
-package_name = 'com.java'
-
-# New way (from config.yaml)
-from config import EXAMPLES_FOLDER, JAVA_FOLDER, BASE_PACKAGE
-```
-
 ## How to Use
 
 ### Running the Main Script
 
-The `main.py` script automates the entire process of generating examples and Java classes. It ensures that the OpenAPI file exists (as specified in `config.yaml`), deletes old output folders, and regenerates them.
+The `main.py` script automates the entire process of generating examples and Java classes. It ensures that the OpenAPI files exist, deletes old output folders, and regenerates them.
 
 ```bash
-python3 main.py
+python main.py
 ```
 
 ### What the Script Does
 1. Loads configuration from `config.yaml` (creates it with defaults if it doesn't exist)
-2. Checks if the OpenAPI file exists (from configuration)
-3. Deletes the output folders if they exist (from configuration)
-4. Runs `generate_json_examples.py` to create JSON examples
-5. Runs `generate_java_classes.py` to generate Java classes from OpenAPI schema
-6. Runs `generate_feign_clients.py` to generate Spring Cloud OpenFeign client interfaces
+2. Processes all OpenAPI YAML files in `openApiDefinitions/` directory
+3. For each definition:
+   - Deletes existing output folders if they exist
+   - Runs `generate_json_examples.py` to create JSON examples
+   - Runs `generate_java_classes.py` to generate Java classes from OpenAPI schema
+   - Runs `generate_feign_clients.py` to generate Spring Cloud OpenFeign client interfaces
 
 ### Output Structure
 - `java/` - Contains generated Java classes organized by endpoints
@@ -749,10 +770,12 @@ python3 main.py
 ALL_SCHEMAS/
 ├── BaseSchema1.json (or .java)
 ├── BaseSchema2.json (or .java)
-├── BaseSchema1/
+├── baseSchema1/
+│   ├── BaseSchema1.json (or .java)      ← Parent class also in folder
 │   ├── DerivedSchema1.json (or .java)
 │   └── DerivedSchema2.json (or .java)
-└── BaseSchema2/
+└── baseSchema2/
+    ├── BaseSchema2.json (or .java)      ← Parent class also in folder
     └── DerivedSchema3.json (or .java)
 ```
 
@@ -761,16 +784,22 @@ ALL_SCHEMAS/
 - **No Duplicates**: Each schema appears only once
 - **Clear Hierarchy**: Inheritance relationships visible in folder structure
 - **Easy Navigation**: Find base classes and their derivatives instantly
+- **Parent Classes Included**: Base classes are copied to their own folders along with children
 
 **Example:**
 ```
-java/claim-home-catalog/ALL_SCHEMAS/
-├── Error.java                    # Base class
-├── PatrimonialAvailability.java  # Base class
-├── Error/
-│   ├── ErrorComponent.java       # Extends Error
-│   └── ErrorInfo.java             # Extends Error
-└── AvailabilityResponse.java     # Base class
+java/product-api/ALL_SCHEMAS/
+├── Product.java                   # Base class (also in root)
+├── PaymentMethod.java             # Base class (also in root)
+├── product/
+│   ├── Product.java               # Parent class
+│   ├── PhysicalProduct.java       # Extends Product
+│   └── DigitalProduct.java        # Extends Product
+├── paymentMethod/
+│   ├── PaymentMethod.java         # Parent class
+│   ├── CreditCard.java            # Extends PaymentMethod
+│   └── BankTransfer.java          # Extends PaymentMethod
+└── Category.java                  # Standalone class
 ```
 
 ## Feign Client Generation
@@ -793,10 +822,10 @@ python3 generate_feign_clients.py
 
 #### Features
 
-- **Tag-Based Organization**: One Feign client interface per OpenAPI tag (e.g., ClaimClient, ProceedingClient, DocumentClient)
+- **Tag-Based Organization**: One Feign client interface per OpenAPI tag (e.g., ProductClient, OrderClient, CustomerClient)
 - **Spring Annotations**: Proper `@FeignClient`, `@GetMapping`, `@PostMapping`, etc.
 - **Type-Safe Parameters**: All path variables, query params, headers, and request bodies
-- **ResponseEntity Wrappers**: All methods return `ResponseEntity<T>` for proper HTTP handling
+- **ResponseEntity Wrappers**: Optional `ResponseEntity<T>` return types for proper HTTP handling
 - **JavaDoc Documentation**: Includes summaries and descriptions from OpenAPI
 - **Configuration Class**: Optional FeignConfiguration class with common settings
 
@@ -805,15 +834,15 @@ python3 generate_feign_clients.py
 **OpenAPI Definition:**
 ```yaml
 paths:
-  /claim/{claimId}:
+  /products/{productId}:
     get:
       tags:
-        - Claim
-      summary: Get a certain claim.
-      description: Get a certain claim, given its unique claim ID.
-      operationId: getClaimHome
+        - Product
+      summary: Get product details
+      description: Retrieve detailed information about a specific product.
+      operationId: getProduct
       parameters:
-        - name: claimId
+        - name: productId
           in: path
           required: true
           schema:
@@ -823,43 +852,43 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Claim"
+                $ref: "#/components/schemas/Product"
 ```
 
 **Generated Feign Client:**
 ```java
-package com.mapfresaluddigital.apichannelhome.client;
+package com.mycompany.api.client;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 
 /**
- * Feign client for Claim operations.
- * Business API containing claim/assistance opening and management operations for Spain.
+ * Feign client for Product operations.
+ * Product catalog API for managing products and inventory.
  */
-@FeignClient(name = "claim", url = "${feign.client.claim.url}")
-public interface ClaimClient {
+@FeignClient(name = "product", url = "${feign.client.product.url}")
+public interface ProductClient {
 
     /**
-     * Get a certain claim.
-     * Get a certain claim, given its unique claim ID.
+     * Get product details.
+     * Retrieve detailed information about a specific product.
      *
-     * @param claimId
-     * @return Claim
+     * @param productId Product identifier
+     * @return Product
      */
-    @GetMapping("/claim/{claimId}")
-    ResponseEntity<Claim> getClaimHome(@PathVariable("claimId") String claimId);
+    @GetMapping("/products/{productId}")
+    ResponseEntity<Product> getProduct(@PathVariable("productId") String productId);
 
     /**
-     * Generate claim.
-     * Generate claim.
+     * Create new product.
+     * Add a new product to the catalog.
      *
-     * @param body
-     * @return ClaimCreate
+     * @param body Product details
+     * @return Product
      */
-    @PostMapping("/claim")
-    ResponseEntity<ClaimCreate> generateClaimPatrimonial(@RequestBody ClaimDetail body);
+    @PostMapping("/products")
+    ResponseEntity<Product> createProduct(@RequestBody ProductRequest body);
 }
 ```
 
@@ -909,7 +938,7 @@ feign:
 2. **Enable Feign Clients** in your Spring Boot application:
 ```java
 @SpringBootApplication
-@EnableFeignClients(basePackages = "com.mapfresaluddigital.apichannelhome.client")
+@EnableFeignClients(basePackages = "com.mycompany.api.client")
 public class Application {
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
@@ -921,32 +950,32 @@ public class Application {
 ```yaml
 feign:
   client:
-    claim:
+    product:
       url: https://api.example.com/api/v1
-    proceeding:
+    order:
       url: https://api.example.com/api/v1
-    document:
+    customer:
       url: https://api.example.com/api/v1
 ```
 
 4. **Inject and Use** in your services:
 ```java
 @Service
-public class ClaimService {
+public class ProductService {
     
-    private final ClaimClient claimClient;
+    private final ProductClient productClient;
     
-    public ClaimService(ClaimClient claimClient) {
-        this.claimClient = claimClient;
+    public ProductService(ProductClient productClient) {
+        this.productClient = productClient;
     }
     
-    public Claim getClaim(String claimId) {
-        ResponseEntity<Claim> response = claimClient.getClaimHome(claimId);
+    public Product getProduct(String productId) {
+        ResponseEntity<Product> response = productClient.getProduct(productId);
         return response.getBody();
     }
     
-    public ClaimCreate createClaim(ClaimDetail details) {
-        ResponseEntity<ClaimCreate> response = claimClient.generateClaimPatrimonial(details);
+    public Product createProduct(ProductRequest request) {
+        ResponseEntity<Product> response = productClient.createProduct(request);
         return response.getBody();
     }
 }
@@ -957,7 +986,7 @@ public class ClaimService {
 When `generate_config: true`, a configuration class is created:
 
 ```java
-package com.mapfresaluddigital.apichannelhome.client.config;
+package com.mycompany.api.client.config;
 
 import feign.Logger;
 import feign.RequestInterceptor;
@@ -998,13 +1027,11 @@ This provides a central place to configure:
 ### Output Structure
 ```
 feign/
-  ClaimClient.java
-  ProceedingClient.java
-  CommunicationClient.java
-  IndemnityClient.java
-  DocumentClient.java
-  TaskClient.java
-  AssistanceClient.java
+  ProductClient.java
+  OrderClient.java
+  CustomerClient.java
+  PaymentClient.java
+  InventoryClient.java
   config/
     FeignConfiguration.java
 ```
