@@ -72,16 +72,27 @@ def get_java_type_from_schema(schema, schemas, components):
     if '$ref' in schema:
         ref_path = schema['$ref'].split('/')
         if ref_path[-2] == 'schemas':
-            class_name = to_java_class_name(ref_path[-1])
-            # Check if this schema has oneOf fields and needs generic definition
             schema_name = ref_path[-1]
+            class_name = to_java_class_name(schema_name)
+
+            # Check if the referenced schema is actually an array type
             if schema_name in schemas:
                 actual_schema = schemas[schema_name]
-                # Only check for oneOf, don't recurse
+
+                # If it's an array schema without properties, use List<ItemType> instead
+                if (actual_schema.get('type') == 'array' and
+                    'properties' not in actual_schema and
+                    'allOf' not in actual_schema and
+                    'items' in actual_schema):
+                    item_type = get_java_type_from_schema(actual_schema['items'], schemas, components)
+                    return f"List<{item_type}>"
+
+                # Check if this schema has oneOf fields and needs generic definition
                 if has_oneof_property(actual_schema):
                     base_class = get_oneof_base_class_name(actual_schema)
                     if base_class:
                         return f"{class_name}<? extends {base_class}>"
+
             return class_name
         elif ref_path[-2] == 'parameters':
             return 'String'  # Default for parameters
