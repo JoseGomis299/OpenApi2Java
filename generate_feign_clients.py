@@ -94,16 +94,23 @@ def get_java_type_from_schema(schema, schemas, components):
                         return f"{class_name}<? extends {base_class}>"
 
             return class_name
-        elif ref_path[-2] == 'parameters':
-            return 'String'  # Default for parameters
+        # Note: parameter refs are handled below by looking at their schema
 
     schema_type = schema.get('type', 'object')
+    schema_format = schema.get('format', '')
 
     if schema_type == 'array':
         if 'items' in schema:
             item_type = get_java_type_from_schema(schema['items'], schemas, components)
             return f"List<{item_type}>"
         return "List<Object>"
+
+    # Check for date/date-time formats
+    if schema_type == 'string':
+        if schema_format == 'date':
+            return 'LocalDate'
+        elif schema_format == 'date-time':
+            return 'LocalDateTime'
 
     type_mapping = {
         'string': 'String',
@@ -281,29 +288,52 @@ def generate_feign_client(tag, paths_by_tag, openapi_spec, config):
     if use_response_entity:
         imports.add("org.springframework.http.ResponseEntity")
 
-    # Check if we need List import
+    # Check if we need List, LocalDate, or LocalDateTime imports
     has_lists = False
+    has_local_date = False
+    has_local_date_time = False
+
     for path, methods in paths_by_tag:
         for method, operation in methods.items():
             # Check parameters
             for param_or_ref in operation.get('parameters', []):
                 param = get_parameter_info(param_or_ref, openapi_spec)
                 schema = param.get('schema', {})
+                param_type = get_java_type_from_schema(schema, schemas, components)
+
                 if schema.get('type') == 'array':
                     has_lists = True
+                if 'LocalDate' in param_type and 'LocalDateTime' not in param_type:
+                    has_local_date = True
+                if 'LocalDateTime' in param_type:
+                    has_local_date_time = True
 
             # Check request body
             request_body_type = get_request_body_type(operation.get('requestBody'), schemas, components)
-            if request_body_type and 'List<' in str(request_body_type):
-                has_lists = True
+            if request_body_type:
+                if 'List<' in str(request_body_type):
+                    has_lists = True
+                if 'LocalDate' in str(request_body_type) and 'LocalDateTime' not in str(request_body_type):
+                    has_local_date = True
+                if 'LocalDateTime' in str(request_body_type):
+                    has_local_date_time = True
 
             # Check response
             response_type = get_response_type(operation.get('responses', {}), schemas, components)
-            if 'List<' in str(response_type):
-                has_lists = True
+            if response_type:
+                if 'List<' in str(response_type):
+                    has_lists = True
+                if 'LocalDate' in str(response_type) and 'LocalDateTime' not in str(response_type):
+                    has_local_date = True
+                if 'LocalDateTime' in str(response_type):
+                    has_local_date_time = True
 
     if has_lists:
         imports.add("java.util.List")
+    if has_local_date:
+        imports.add("java.time.LocalDate")
+    if has_local_date_time:
+        imports.add("java.time.LocalDateTime")
 
     for imp in sorted(imports):
         lines.append(f"import {imp};")
@@ -489,8 +519,11 @@ def generate_single_api_client(all_paths, openapi_spec, config):
     if use_response_entity:
         imports.add("org.springframework.http.ResponseEntity")
 
-    # Check if we need List import
+    # Check if we need List, LocalDate, or LocalDateTime imports
     has_lists = False
+    has_local_date = False
+    has_local_date_time = False
+
     for path, path_item in all_paths:
         for method in ['get', 'post', 'put', 'delete', 'patch']:
             if method not in path_item:
@@ -501,21 +534,41 @@ def generate_single_api_client(all_paths, openapi_spec, config):
             for param_or_ref in operation.get('parameters', []):
                 param = get_parameter_info(param_or_ref, openapi_spec)
                 schema = param.get('schema', {})
+                param_type = get_java_type_from_schema(schema, schemas, components)
+
                 if schema.get('type') == 'array':
                     has_lists = True
+                if 'LocalDate' in param_type and 'LocalDateTime' not in param_type:
+                    has_local_date = True
+                if 'LocalDateTime' in param_type:
+                    has_local_date_time = True
 
             # Check request body
             request_body_type = get_request_body_type(operation.get('requestBody'), schemas, components)
-            if request_body_type and 'List<' in str(request_body_type):
-                has_lists = True
+            if request_body_type:
+                if 'List<' in str(request_body_type):
+                    has_lists = True
+                if 'LocalDate' in str(request_body_type) and 'LocalDateTime' not in str(request_body_type):
+                    has_local_date = True
+                if 'LocalDateTime' in str(request_body_type):
+                    has_local_date_time = True
 
             # Check response
             response_type = get_response_type(operation.get('responses', {}), schemas, components)
-            if 'List<' in str(response_type):
-                has_lists = True
+            if response_type:
+                if 'List<' in str(response_type):
+                    has_lists = True
+                if 'LocalDate' in str(response_type) and 'LocalDateTime' not in str(response_type):
+                    has_local_date = True
+                if 'LocalDateTime' in str(response_type):
+                    has_local_date_time = True
 
     if has_lists:
         imports.add("java.util.List")
+    if has_local_date:
+        imports.add("java.time.LocalDate")
+    if has_local_date_time:
+        imports.add("java.time.LocalDateTime")
 
     for imp in sorted(imports):
         lines.append(f"import {imp};")
