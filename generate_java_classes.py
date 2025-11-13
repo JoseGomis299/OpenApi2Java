@@ -1768,47 +1768,23 @@ def copy_inheritance_hierarchy(class_name, output_dir, all_schemas_dir, base_pac
 
     # Determine destination
     if parent_class is None:
-        # This is a base class - put it at root level
-        dest_file = os.path.join(all_schemas_dir, f"{class_name}.java")
-        new_package = f"{base_package}.ALL_SCHEMAS"
-
-        # If this class has children, also create a folder for it and copy the class there
+        # This is a base class
+        # Check if this class has children
         has_children = any(p == class_name for p in inheritance_map.values())
-        if has_children and class_name not in parent_folders_created:
+
+        if has_children:
+            # Has children - ONLY put it in its own folder with children, not at root
             parent_folder = to_camel_case(class_name)
             parent_dir = os.path.join(all_schemas_dir, parent_folder)
             os.makedirs(parent_dir, exist_ok=True)
 
-            # Copy the parent class into its own folder with updated package
-            parent_dest_file = os.path.join(parent_dir, f"{class_name}.java")
-            parent_package = f"{base_package}.ALL_SCHEMAS.{parent_folder}"
-            parent_content = update_package_in_file(file_content, parent_package)
-
-            # Update imports for parent class in its folder
-            def update_import_for_parent(match):
-                full_import = match.group(0)
-                imported_class = match.group(2)
-
-                if imported_class in inheritance_map:
-                    imported_parent = inheritance_map.get(imported_class)
-                    if imported_parent is None:
-                        return f"import {base_package}.ALL_SCHEMAS.{imported_class};"
-                    else:
-                        parent_folder_imported = to_camel_case(imported_parent)
-                        return f"import {base_package}.ALL_SCHEMAS.{parent_folder_imported}.{imported_class};"
-
-                return full_import
-
-            parent_content = re.sub(
-                r'import\s+([\w.]+)\.([\w]+);',
-                update_import_for_parent,
-                parent_content
-            )
-
-            with open(parent_dest_file, 'w', encoding='utf-8') as f:
-                f.write(parent_content)
-
+            dest_file = os.path.join(parent_dir, f"{class_name}.java")
+            new_package = f"{base_package}.ALL_SCHEMAS.{parent_folder}"
             parent_folders_created.add(class_name)
+        else:
+            # No children - put at root level
+            dest_file = os.path.join(all_schemas_dir, f"{class_name}.java")
+            new_package = f"{base_package}.ALL_SCHEMAS"
     else:
         # This is a derived class - put it in parent's folder
         parent_folder = to_camel_case(parent_class)
@@ -1834,8 +1810,15 @@ def copy_inheritance_hierarchy(class_name, output_dir, all_schemas_dir, base_pac
         if imported_class in inheritance_map:
             imported_parent = inheritance_map.get(imported_class)
             if imported_parent is None:
-                # Base class - import from root
-                return f"import {base_package}.ALL_SCHEMAS.{imported_class};"
+                # Base class - check if it has children
+                has_children = any(p == imported_class for p in inheritance_map.values())
+                if has_children:
+                    # Has children - import from its folder
+                    class_folder = to_camel_case(imported_class)
+                    return f"import {base_package}.ALL_SCHEMAS.{class_folder}.{imported_class};"
+                else:
+                    # No children - import from root
+                    return f"import {base_package}.ALL_SCHEMAS.{imported_class};"
             else:
                 # Derived class - import from parent folder
                 parent_folder = to_camel_case(imported_parent)
@@ -1877,16 +1860,34 @@ def generate_all_schemas_java(openapi_file, output_dir, package, enable_javadoc,
     print(f"\n📦 Generating ALL_SCHEMAS folder...")
     print(f"   Total schemas in OpenAPI: {len(schemas)}")
 
-    # Build inheritance map by analyzing generated Java files
+    # Scan all generated Java files to find ALL classes (including inline classes)
+    print(f"   🔍 Scanning all generated Java files...")
+    all_generated_classes = set()
+
+    # Exclude ALL_SCHEMAS and NO_ENDPOINT folders from scan
+    for root, dirs, files in os.walk(output_dir):
+        # Skip ALL_SCHEMAS and NO_ENDPOINT folders
+        if 'ALL_SCHEMAS' in root or 'NO_ENDPOINT' in root:
+            continue
+
+        for file in files:
+            if file.endswith('.java'):
+                class_name = file[:-5]  # Remove .java extension
+                all_generated_classes.add(class_name)
+
+    print(f"   Found {len(all_generated_classes)} unique classes in endpoint folders")
+
+
+    # Build inheritance map by analyzing ALL generated Java files (not just schema-defined ones)
     print(f"   🔍 Analyzing Java files to detect inheritance...")
-    inheritance_map = build_inheritance_map_from_files(output_dir, schemas.keys())
+    inheritance_map = build_inheritance_map_from_files(output_dir, all_generated_classes)
 
     # Organize schemas by inheritance hierarchy
     base_schemas = {name for name, parent in inheritance_map.items() if parent is None}
     derived_schemas = {name for name, parent in inheritance_map.items() if parent is not None}
 
-    print(f"   Base schemas: {len(base_schemas)}")
-    print(f"   Derived schemas: {len(derived_schemas)}")
+    print(f"   Base classes: {len(base_schemas)}")
+    print(f"   Derived classes: {len(derived_schemas)}")
 
     # Track processed classes to avoid duplicates
     processed_classes = set()
@@ -1894,8 +1895,8 @@ def generate_all_schemas_java(openapi_file, output_dir, package, enable_javadoc,
     copied_count = 0
     not_found_classes = []
 
-    # Process all schemas (both base and derived)
-    all_schema_names = sorted(schemas.keys())
+    # Process all generated classes (not just OpenAPI schemas)
+    all_schema_names = sorted(all_generated_classes)
 
     for schema_name in all_schema_names:
         # Copy this class and its entire hierarchy
@@ -1916,16 +1917,102 @@ def generate_all_schemas_java(openapi_file, output_dir, package, enable_javadoc,
 
     print(f"   ✅ Copied {copied_count} classes organized by inheritance hierarchy")
 
-    if not_found_classes:
-        print(f"   ⚠️  {len(not_found_classes)} classes not found in endpoints (may be unused or array-only schemas)")
-        # Only show a few examples
-        if len(not_found_classes) <= 5:
-            for class_name in not_found_classes:
-                print(f"      - {class_name}")
-        else:
-            for class_name in not_found_classes[:3]:
-                print(f"      - {class_name}")
-            print(f"      ... and {len(not_found_classes) - 3} more")
+    # Update all imports in ALL_SCHEMAS to point to other ALL_SCHEMAS classes
+    print(f"   🔧 Updating imports to reference ALL_SCHEMAS classes...")
+
+    # Build a comprehensive list of all classes in ALL_SCHEMAS (including those in subfolders)
+    all_schemas_classes = set()
+    all_schemas_inheritance = {}
+
+    # Scan ALL_SCHEMAS directory
+    for root, dirs, files in os.walk(all_schemas_dir):
+        for file in files:
+            if file.endswith('.java'):
+                class_name = file[:-5]
+                all_schemas_classes.add(class_name)
+
+                # Determine parent from folder structure
+                rel_path = os.path.relpath(root, all_schemas_dir)
+                if rel_path != '.':
+                    # It's in a subfolder, so the folder name is the parent
+                    folder_name = os.path.basename(root)
+                    # Convert from camelCase folder to PascalCase class name
+                    parent_name = folder_name[0].upper() + folder_name[1:]
+                    all_schemas_inheritance[class_name] = parent_name
+                else:
+                    all_schemas_inheritance[class_name] = None
+
+    print(f"   📋 Found {len(all_schemas_classes)} classes in ALL_SCHEMAS to update")
+
+    # Update imports in all files in ALL_SCHEMAS
+    updates_count = 0
+    for root, dirs, files in os.walk(all_schemas_dir):
+        for file in files:
+            if not file.endswith('.java'):
+                continue
+
+            file_path = os.path.join(root, file)
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            original_content = content
+
+            # Update imports to point to ALL_SCHEMAS
+            def update_import_to_all_schemas(match):
+                full_import = match.group(0)
+                package_path = match.group(1)
+                imported_class = match.group(2)
+
+                # Check if this is one of our classes in ALL_SCHEMAS
+                if imported_class in all_schemas_classes:
+                    parent = all_schemas_inheritance.get(imported_class)
+                    if parent is None:
+                        # Base class - check if it has children
+                        has_children = any(p == imported_class for p in all_schemas_inheritance.values())
+                        if has_children:
+                            # Has children - import from its folder
+                            class_folder = to_camel_case(imported_class)
+                            return f"import {package}.ALL_SCHEMAS.{class_folder}.{imported_class};"
+                        else:
+                            # No children - import from root
+                            return f"import {package}.ALL_SCHEMAS.{imported_class};"
+                    else:
+                        # Derived class in parent folder
+                        parent_folder = to_camel_case(parent)
+                        return f"import {package}.ALL_SCHEMAS.{parent_folder}.{imported_class};"
+
+                # Keep original import
+                return full_import
+
+            content = re.sub(r'import\s+([\w.]+)\.([\w]+);', update_import_to_all_schemas, content)
+
+            # Only write if content changed
+            if content != original_content:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                updates_count += 1
+
+    print(f"   ✅ Updated imports in {updates_count} files")
+
+    # Clean up empty folders in ALL_SCHEMAS
+    print(f"   🧹 Cleaning up empty folders...")
+    removed_folders = 0
+
+    # Walk bottom-up to handle nested empty directories
+    for root, dirs, files in os.walk(all_schemas_dir, topdown=False):
+        for dir_name in dirs:
+            dir_path = os.path.join(root, dir_name)
+            try:
+                # Try to remove - will only succeed if empty
+                os.rmdir(dir_path)
+                removed_folders += 1
+            except OSError:
+                # Directory not empty, skip it
+                pass
+
+    if removed_folders > 0:
+        print(f"   ✅ Removed {removed_folders} empty folders")
 
     print(f"   📁 Total unique classes in ALL_SCHEMAS: {len(processed_classes)}")
 
